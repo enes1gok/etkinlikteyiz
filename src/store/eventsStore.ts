@@ -1,12 +1,15 @@
 import { create } from 'zustand';
-import { Event, Attendee, CheckInResult } from '../types';
-import { MOCK_EVENTS, MOCK_ATTENDEES } from '../utils/mockData';
+import { Event, Attendee, CheckInResult, WaitlistEntry, EventRating } from '../types';
+import { MOCK_EVENTS, MOCK_ATTENDEES, MOCK_WAITLIST, MOCK_RATINGS } from '../utils/mockData';
 import { validateQRCode } from '../utils/helpers';
 
 interface EventsState {
   events: Event[];
   attendees: Attendee[];
   selectedEvent: Event | null;
+  waitlist: WaitlistEntry[];
+  ratings: EventRating[];
+  reactions: Record<string, string[]>;
   isLoading: boolean;
   error: string | null;
 
@@ -20,6 +23,13 @@ interface EventsState {
   checkInByQR: (qrData: string, eventId: string) => Promise<CheckInResult>;
   getEventAttendees: (eventId: string) => Attendee[];
   getUserEvents: (userId: string) => Event[];
+  toggleInterest: (eventId: string, userId: string) => void;
+  isInterested: (eventId: string, userId: string) => boolean;
+  joinWaitlist: (eventId: string, userId: string, name: string, studentId: string) => Promise<boolean>;
+  leaveWaitlist: (eventId: string, userId: string) => void;
+  getWaitlistPosition: (eventId: string, userId: string) => number;
+  submitRating: (eventId: string, userId: string, rating: number, comment?: string) => Promise<boolean>;
+  getUserRating: (eventId: string, userId: string) => EventRating | undefined;
   clearError: () => void;
 }
 
@@ -27,6 +37,9 @@ export const useEventsStore = create<EventsState>((set, get) => ({
   events: [],
   attendees: [],
   selectedEvent: null,
+  waitlist: [],
+  ratings: [],
+  reactions: {},
   isLoading: false,
   error: null,
 
@@ -34,7 +47,13 @@ export const useEventsStore = create<EventsState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       await new Promise((r) => setTimeout(r, 600));
-      set({ events: MOCK_EVENTS, attendees: MOCK_ATTENDEES, isLoading: false });
+      set({
+        events: MOCK_EVENTS,
+        attendees: MOCK_ATTENDEES,
+        waitlist: MOCK_WAITLIST,
+        ratings: MOCK_RATINGS,
+        isLoading: false,
+      });
     } catch {
       set({ isLoading: false, error: 'Etkinlikler yüklenemedi. Lütfen tekrar deneyin.' });
     }
@@ -142,6 +161,119 @@ export const useEventsStore = create<EventsState>((set, get) => ({
     const userAttendances = get().attendees.filter((a) => a.userId === userId);
     const eventIds = new Set(userAttendances.map((a) => a.eventId));
     return get().events.filter((e) => eventIds.has(e.id));
+  },
+
+  toggleInterest: (eventId, userId) => {
+    set((state) => {
+      const current = state.reactions[eventId] ?? [];
+      const isAlreadyInterested = current.includes(userId);
+      const updated = isAlreadyInterested
+        ? current.filter((id) => id !== userId)
+        : [...current, userId];
+
+      const interestedDelta = isAlreadyInterested ? -1 : 1;
+
+      return {
+        reactions: { ...state.reactions, [eventId]: updated },
+        events: state.events.map((e) =>
+          e.id === eventId
+            ? { ...e, interestedCount: Math.max(0, (e.interestedCount ?? 0) + interestedDelta) }
+            : e
+        ),
+      };
+    });
+  },
+
+  isInterested: (eventId, userId) => {
+    return (get().reactions[eventId] ?? []).includes(userId);
+  },
+
+  joinWaitlist: async (eventId, userId, name, studentId) => {
+    try {
+      await new Promise((r) => setTimeout(r, 400));
+
+      const alreadyOnWaitlist = get().waitlist.some(
+        (w) => w.eventId === eventId && w.userId === userId
+      );
+      if (alreadyOnWaitlist) return false;
+
+      const entry: WaitlistEntry = {
+        id: `w_${Date.now()}`,
+        eventId,
+        userId,
+        name,
+        studentId,
+        joinedAt: new Date().toISOString(),
+      };
+
+      set((state) => ({
+        waitlist: [...state.waitlist, entry],
+        events: state.events.map((e) =>
+          e.id === eventId ? { ...e, waitlistCount: (e.waitlistCount ?? 0) + 1 } : e
+        ),
+      }));
+
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  leaveWaitlist: (eventId, userId) => {
+    set((state) => ({
+      waitlist: state.waitlist.filter((w) => !(w.eventId === eventId && w.userId === userId)),
+      events: state.events.map((e) =>
+        e.id === eventId
+          ? { ...e, waitlistCount: Math.max(0, (e.waitlistCount ?? 1) - 1) }
+          : e
+      ),
+    }));
+  },
+
+  getWaitlistPosition: (eventId, userId) => {
+    const list = get().waitlist.filter((w) => w.eventId === eventId);
+    const idx = list.findIndex((w) => w.userId === userId);
+    return idx === -1 ? -1 : idx + 1;
+  },
+
+  submitRating: async (eventId, userId, rating, comment) => {
+    try {
+      await new Promise((r) => setTimeout(r, 400));
+
+      const existing = get().ratings.find((r) => r.eventId === eventId && r.userId === userId);
+      if (existing) return false;
+
+      const newRating: EventRating = {
+        id: `r_${Date.now()}`,
+        eventId,
+        userId,
+        rating,
+        comment,
+        createdAt: new Date().toISOString(),
+      };
+
+      set((state) => {
+        const eventRatings = [...state.ratings.filter((r) => r.eventId === eventId), newRating];
+        const avg = eventRatings.reduce((s, r) => s + r.rating, 0) / eventRatings.length;
+
+        return {
+          ratings: [...state.ratings, newRating],
+          events: state.events.map((e) =>
+            e.id === eventId
+              ? { ...e, averageRating: Math.round(avg * 10) / 10, ratingCount: eventRatings.length }
+              : e
+          ),
+        };
+      });
+
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  getUserRating: (eventId, userId) => {
+    return get().ratings.find((r) => r.eventId === eventId && r.userId === userId);
   },
 
   clearError: () => set({ error: null }),

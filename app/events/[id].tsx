@@ -21,6 +21,11 @@ import { Badge } from '../../src/components/ui/Badge';
 import { Button } from '../../src/components/ui/Button';
 import { Avatar } from '../../src/components/ui/Avatar';
 import { ProgressBar } from '../../src/components/ui/ProgressBar';
+import { EventCountdown } from '../../src/components/events/EventCountdown';
+import { EventReactions } from '../../src/components/events/EventReactions';
+import { EventAgenda } from '../../src/components/events/EventAgenda';
+import { AttendeesPreview } from '../../src/components/events/AttendeesPreview';
+import { RatingModal } from '../../src/components/events/RatingModal';
 import { Colors } from '../../src/theme/colors';
 import { FontSize, FontWeight } from '../../src/theme/typography';
 import { BorderRadius, Spacing } from '../../src/theme/spacing';
@@ -39,16 +44,59 @@ const STATUS_VARIANTS: Record<string, 'primary' | 'success' | 'warning' | 'error
   cancelled: 'error',
 };
 
+function StarRating({ value, count }: { value: number; count: number }) {
+  const scheme = useColorScheme();
+  const isDark = scheme === 'dark';
+  const theme = isDark ? Colors.dark : Colors.light;
+  return (
+    <View style={starStyles.row}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Ionicons
+          key={n}
+          name={n <= Math.round(value) ? 'star' : 'star-outline'}
+          size={14}
+          color={Colors.warning}
+        />
+      ))}
+      <Text style={[starStyles.value, { color: theme.text }]}>{value.toFixed(1)}</Text>
+      <Text style={[starStyles.count, { color: theme.textMuted }]}>({count})</Text>
+    </View>
+  );
+}
+
+const starStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  value: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, marginLeft: 4 },
+  count: { fontSize: FontSize.xs },
+});
+
 export default function EventDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
 
-  const { events, attendees, selectEvent, selectedEvent, registerForEvent, isLoading } = useEventsStore();
+  const {
+    events,
+    attendees,
+    selectEvent,
+    selectedEvent,
+    registerForEvent,
+    joinWaitlist,
+    leaveWaitlist,
+    getWaitlistPosition,
+    toggleInterest,
+    isInterested,
+    submitRating,
+    getUserRating,
+    isLoading,
+  } = useEventsStore();
   const { user } = useAuthStore();
+
   const [registering, setRegistering] = useState(false);
+  const [joiningWaitlist, setJoiningWaitlist] = useState(false);
   const [showQR, setShowQR] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
 
   useEffect(() => {
     if (id) selectEvent(id);
@@ -56,7 +104,6 @@ export default function EventDetailScreen() {
 
   const event = selectedEvent ?? events.find((e) => e.id === id);
 
-  // Show loading while store hydrates
   if (isLoading && !event) {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
@@ -67,7 +114,6 @@ export default function EventDetailScreen() {
     );
   }
 
-  // Event not found after loading
   if (!event) {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
@@ -96,6 +142,12 @@ export default function EventDetailScreen() {
   const capacityRate = getCapacityRate(event.registeredCount, event.maxCapacity);
   const attendanceRate = getAttendanceRate(event.checkedInCount, event.registeredCount);
   const categoryColor = Colors.eventCategoryColors[event.category] ?? Colors.primary;
+  const isFull = capacityRate >= 100;
+  const userId = user?.id ?? '';
+  const userInterested = isInterested(event.id, userId);
+  const waitlistPos = getWaitlistPosition(event.id, userId);
+  const onWaitlist = waitlistPos > 0;
+  const userRating = getUserRating(event.id, userId);
 
   const handleRegister = async () => {
     if (!user) return;
@@ -116,12 +168,45 @@ export default function EventDetailScreen() {
     }
   };
 
+  const handleJoinWaitlist = async () => {
+    if (!user) return;
+    setJoiningWaitlist(true);
+    const ok = await joinWaitlist(event.id, user.id, user.name, user.studentId);
+    setJoiningWaitlist(false);
+    if (ok) {
+      const pos = getWaitlistPosition(event.id, user.id);
+      Alert.alert(
+        'Bekleme Listesine Eklendiniz',
+        `Sıranız: ${pos}. Kontenjan açıldığında bildirim alacaksınız.`,
+        [{ text: 'Tamam' }]
+      );
+    }
+  };
+
+  const handleLeaveWaitlist = () => {
+    if (!user) return;
+    Alert.alert('Bekleme Listesinden Çık', 'Bekleme listesinden çıkmak istediğinize emin misiniz?', [
+      { text: 'İptal', style: 'cancel' },
+      { text: 'Çık', style: 'destructive', onPress: () => leaveWaitlist(event.id, user.id) },
+    ]);
+  };
+
+  const handleToggleInterest = useCallback(() => {
+    if (!userId) return;
+    toggleInterest(event.id, userId);
+  }, [event.id, userId, toggleInterest]);
+
   const handleShare = useCallback(() => {
     Share.share({
       title: event.title,
       message: `${event.title}\n${formatDate(event.date)} · ${event.startTime}\n${event.location}\n\nUniComm ile keşfet!`,
     });
   }, [event]);
+
+  const handleRatingSubmit = async (rating: number, comment?: string) => {
+    await submitRating(event.id, userId, rating, comment);
+    Alert.alert('Teşekkürler!', 'Değerlendirmeniz kaydedildi.');
+  };
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
@@ -157,8 +242,14 @@ export default function EventDetailScreen() {
             </View>
             <Text style={[styles.eventTitle, { color: theme.text }]}>{event.title}</Text>
             <Text style={[styles.communityName, { color: categoryColor }]}>{event.communityName}</Text>
+            {event.averageRating != null && event.ratingCount != null && (
+              <StarRating value={event.averageRating} count={event.ratingCount} />
+            )}
           </View>
         </LinearGradient>
+
+        {/* Countdown */}
+        <EventCountdown date={event.date} startTime={event.startTime} status={event.status} />
 
         {/* Key Info */}
         <View style={styles.infoGrid}>
@@ -182,6 +273,25 @@ export default function EventDetailScreen() {
           ))}
         </View>
 
+        {/* Reactions */}
+        <EventReactions
+          eventId={event.id}
+          interestedCount={event.interestedCount ?? 0}
+          isInterested={userInterested}
+          onToggleInterest={handleToggleInterest}
+          onShare={handleShare}
+        />
+
+        {/* Attendees "See who's going" */}
+        {eventAttendees.length > 0 && event.status === 'upcoming' && (
+          <AttendeesPreview
+            attendees={eventAttendees}
+            totalCount={event.registeredCount}
+            categoryColor={categoryColor}
+            label="Kimler Geliyor"
+          />
+        )}
+
         {/* Description */}
         <View style={[styles.section, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Hakkında</Text>
@@ -199,24 +309,38 @@ export default function EventDetailScreen() {
           </View>
         )}
 
+        {/* Agenda */}
+        {event.agenda && event.agenda.length > 0 && (
+          <EventAgenda agenda={event.agenda} categoryColor={categoryColor} />
+        )}
+
         {/* Capacity */}
         <View style={[styles.section, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}>
           <View style={styles.capacityHeader}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Kapasite</Text>
-            <Text style={[styles.capacityPct, { color: capacityRate > 90 ? Colors.error : categoryColor }]}>
+            <Text style={[styles.capacityPct, { color: isFull ? Colors.error : categoryColor }]}>
               {capacityRate}% dolu
             </Text>
           </View>
           <ProgressBar
             value={event.registeredCount}
             max={event.maxCapacity}
-            color={capacityRate > 90 ? Colors.error : categoryColor}
+            color={isFull ? Colors.error : categoryColor}
             height={8}
             trackColor={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}
           />
-          <Text style={[styles.capacityDetail, { color: theme.textMuted }]}>
-            {event.maxCapacity - event.registeredCount} kişilik yer kaldı
-          </Text>
+          {isFull ? (
+            <View style={styles.waitlistInfo}>
+              <Ionicons name="hourglass-outline" size={14} color={Colors.warning} />
+              <Text style={[styles.capacityDetail, { color: Colors.warning }]}>
+                Kontenjan dolu · {event.waitlistCount ?? 0} kişi bekleme listesinde
+              </Text>
+            </View>
+          ) : (
+            <Text style={[styles.capacityDetail, { color: theme.textMuted }]}>
+              {event.maxCapacity - event.registeredCount} kişilik yer kaldı
+            </Text>
+          )}
 
           {event.status === 'completed' && (
             <>
@@ -241,7 +365,7 @@ export default function EventDetailScreen() {
           )}
         </View>
 
-        {/* Attendees Preview */}
+        {/* Organizer attendee list */}
         {isOrganizer && eventAttendees.length > 0 && (
           <View style={[styles.section, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}>
             <View style={styles.sectionHeader}>
@@ -270,6 +394,39 @@ export default function EventDetailScreen() {
                 </View>
               ))}
             </View>
+          </View>
+        )}
+
+        {/* Post-event Rating */}
+        {event.status === 'completed' && isRegistered && (
+          <View style={[styles.section, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Değerlendirme</Text>
+              {event.averageRating != null && (
+                <StarRating value={event.averageRating} count={event.ratingCount ?? 0} />
+              )}
+            </View>
+            {userRating ? (
+              <View style={[styles.myRating, { backgroundColor: `${Colors.warning}15`, borderColor: `${Colors.warning}30` }]}>
+                <View style={styles.myRatingStars}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Ionicons key={n} name={n <= userRating.rating ? 'star' : 'star-outline'} size={16} color={Colors.warning} />
+                  ))}
+                </View>
+                {userRating.comment && (
+                  <Text style={[styles.myRatingComment, { color: theme.textSecondary }]}>"{userRating.comment}"</Text>
+                )}
+                <Text style={[styles.myRatingDate, { color: theme.textMuted }]}>Değerlendirdiniz</Text>
+              </View>
+            ) : (
+              <Button
+                label="Etkinliği Değerlendir"
+                onPress={() => setShowRatingModal(true)}
+                variant="outline"
+                fullWidth
+                leftIcon={<Ionicons name="star-outline" size={18} color={Colors.primary} />}
+              />
+            )}
           </View>
         )}
 
@@ -316,19 +473,45 @@ export default function EventDetailScreen() {
               size="md"
             />
           </View>
+        ) : isFull && event.isRegistrationOpen && event.status === 'upcoming' ? (
+          onWaitlist ? (
+            <View style={styles.registeredRow}>
+              <View style={[styles.registeredBadge, { backgroundColor: `${Colors.warning}20` }]}>
+                <Ionicons name="hourglass-outline" size={18} color={Colors.warning} />
+                <Text style={[styles.registeredText, { color: Colors.warning }]}>{waitlistPos}. sıradasınız</Text>
+              </View>
+              <Button label="Listeden Çık" onPress={handleLeaveWaitlist} variant="ghost" size="md" />
+            </View>
+          ) : (
+            <Button
+              label="Bekleme Listesine Ekle"
+              onPress={handleJoinWaitlist}
+              loading={joiningWaitlist}
+              fullWidth
+              size="lg"
+              variant="outline"
+              leftIcon={<Ionicons name="hourglass-outline" size={20} color={Colors.primary} />}
+            />
+          )
         ) : event.isRegistrationOpen && event.status === 'upcoming' ? (
           <Button
-            label={capacityRate >= 100 ? 'Kontenjan Dolu' : 'Kayıt Ol'}
+            label="Kayıt Ol"
             onPress={handleRegister}
             loading={registering}
             fullWidth
             size="lg"
-            disabled={capacityRate >= 100}
           />
         ) : (
           <Button label="Kayıt Kapalı" onPress={() => {}} variant="ghost" fullWidth size="lg" disabled />
         )}
       </View>
+
+      <RatingModal
+        visible={showRatingModal}
+        eventTitle={event.title}
+        onClose={() => setShowRatingModal(false)}
+        onSubmit={handleRatingSubmit}
+      />
     </SafeAreaView>
   );
 }
@@ -354,7 +537,7 @@ const styles = StyleSheet.create({
   infoLabel: { fontSize: FontSize.xs, fontWeight: FontWeight.medium },
   infoValue: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, lineHeight: FontSize.sm * 1.4 },
   section: { marginHorizontal: Spacing.base, borderRadius: BorderRadius.xl, borderWidth: 1, padding: Spacing.base, gap: Spacing.sm, marginBottom: Spacing.md },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between' },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionTitle: { fontSize: FontSize.base, fontWeight: FontWeight.semibold },
   description: { fontSize: FontSize.sm, lineHeight: FontSize.sm * 1.65 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs, paddingHorizontal: Spacing.base, marginBottom: Spacing.md },
@@ -363,6 +546,7 @@ const styles = StyleSheet.create({
   capacityHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   capacityPct: { fontSize: FontSize.sm, fontWeight: FontWeight.bold },
   capacityDetail: { fontSize: FontSize.xs },
+  waitlistInfo: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: Spacing.sm },
   attendanceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   attendeeList: { gap: Spacing.sm },
@@ -372,6 +556,10 @@ const styles = StyleSheet.create({
   attendeeId: { fontSize: FontSize.xs },
   checkinBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: BorderRadius.full },
   checkinText: { fontSize: FontSize.xs, fontWeight: FontWeight.medium },
+  myRating: { borderRadius: BorderRadius.lg, borderWidth: 1, padding: Spacing.md, gap: Spacing.xs },
+  myRatingStars: { flexDirection: 'row', gap: 3 },
+  myRatingComment: { fontSize: FontSize.sm, fontStyle: 'italic', lineHeight: FontSize.sm * 1.5 },
+  myRatingDate: { fontSize: FontSize.xs },
   qrSection: { marginHorizontal: Spacing.base, borderRadius: BorderRadius.xl, borderWidth: 1.5, padding: Spacing.base, alignItems: 'center', gap: Spacing.md, marginBottom: Spacing.md },
   qrHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   qrTitle: { fontSize: FontSize.md, fontWeight: FontWeight.semibold },

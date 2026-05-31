@@ -21,6 +21,7 @@ import { Colors } from '../../src/theme/colors';
 import { FontSize, FontWeight } from '../../src/theme/typography';
 import { BorderRadius, Spacing } from '../../src/theme/spacing';
 import { getAttendanceRate } from '../../src/utils/helpers';
+import { Event } from '../../src/types';
 
 const QUICK_ACTIONS = [
   { icon: 'add-circle-outline' as const, label: 'Etkinlik\nOluştur', route: '/events/create', color: Colors.primary },
@@ -29,13 +30,64 @@ const QUICK_ACTIONS = [
   { icon: 'megaphone-outline' as const, label: 'Bildirim\nGönder', route: '/(tabs)/notifications', color: Colors.secondary },
 ] as const;
 
+function ForYouCard({ event }: { event: Event }) {
+  const scheme = useColorScheme();
+  const isDark = scheme === 'dark';
+  const theme = isDark ? Colors.dark : Colors.light;
+  const categoryColor = Colors.eventCategoryColors[event.category] ?? Colors.primary;
+  const daysLeft = Math.ceil((new Date(event.date).getTime() - Date.now()) / 86400000);
+
+  return (
+    <TouchableOpacity
+      onPress={() => router.push(`/events/${event.id}`)}
+      style={[styles.forYouCard, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}
+      accessibilityRole="button"
+      accessibilityLabel={event.title}
+    >
+      <LinearGradient
+        colors={[`${categoryColor}30`, `${categoryColor}10`]}
+        style={styles.forYouGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <View style={[styles.forYouIcon, { backgroundColor: `${categoryColor}25` }]}>
+          <Ionicons name="sparkles" size={18} color={categoryColor} />
+        </View>
+      </LinearGradient>
+      <View style={styles.forYouContent}>
+        <Text style={[styles.forYouTitle, { color: theme.text }]} numberOfLines={2}>
+          {event.title}
+        </Text>
+        <Text style={[styles.forYouSub, { color: theme.textMuted }]} numberOfLines={1}>
+          {event.communityName}
+        </Text>
+        <View style={styles.forYouMeta}>
+          <View style={[styles.forYouDays, { backgroundColor: `${categoryColor}20` }]}>
+            <Text style={[styles.forYouDaysText, { color: categoryColor }]}>
+              {daysLeft === 0 ? 'Bugün!' : `${daysLeft} gün`}
+            </Text>
+          </View>
+          {event.interestedCount != null && event.interestedCount > 0 && (
+            <View style={styles.forYouInterest}>
+              <Ionicons name="star-outline" size={11} color={theme.textMuted} />
+              <Text style={[styles.forYouInterestText, { color: theme.textMuted }]}>
+                {event.interestedCount}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 export default function HomeScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
 
   const { user, community } = useAuthStore();
-  const { events, fetchEvents, isLoading } = useEventsStore();
+  const { events, fetchEvents, isLoading, attendees } = useEventsStore();
   const { fetchNotifications, unreadCount } = useNotificationsStore();
 
   const userId = user?.id;
@@ -56,6 +108,22 @@ export default function HomeScreen() {
     const totalRegistered = completedEvents.reduce((s, e) => s + e.registeredCount, 0);
     return { avgAttendance: getAttendanceRate(totalCheckedIn, totalRegistered) };
   }, [events]);
+
+  const forYouEvents = useMemo(() => {
+    if (!userId || events.length === 0) return [];
+    const userEventIds = new Set(
+      attendees.filter((a) => a.userId === userId).map((a) => a.eventId)
+    );
+    const attendedCategories = new Set(
+      events.filter((e) => userEventIds.has(e.id)).map((e) => e.category)
+    );
+    const notRegistered = events.filter(
+      (e) => e.status === 'upcoming' && !user?.eventsRegistered.includes(e.id)
+    );
+    const matching = notRegistered.filter((e) => attendedCategories.has(e.category));
+    const rest = notRegistered.filter((e) => !attendedCategories.has(e.category));
+    return [...matching, ...rest].slice(0, 4);
+  }, [events, attendees, userId, user]);
 
   const handleRefresh = useCallback(() => {
     fetchEvents();
@@ -119,6 +187,12 @@ export default function HomeScreen() {
                   </Text>
                   <Ionicons name="people-outline" size={14} color="rgba(255,255,255,0.8)" />
                   <Text style={styles.heroMetaText}>{upcomingEvents[0].registeredCount} kayıtlı</Text>
+                  {upcomingEvents[0].interestedCount != null && upcomingEvents[0].interestedCount > 0 && (
+                    <>
+                      <Ionicons name="star-outline" size={14} color="rgba(255,255,255,0.8)" />
+                      <Text style={styles.heroMetaText}>{upcomingEvents[0].interestedCount} ilgi</Text>
+                    </>
+                  )}
                 </View>
                 <TouchableOpacity
                   onPress={() => router.push(`/events/${upcomingEvents[0].id}`)}
@@ -184,6 +258,34 @@ export default function HomeScreen() {
             ))}
           </View>
         </View>
+
+        {/* For You Section */}
+        {forYouEvents.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.forYouHeading}>
+                <View style={[styles.sparkleWrap, { backgroundColor: `${Colors.primary}20` }]}>
+                  <Ionicons name="sparkles" size={14} color={Colors.primary} />
+                </View>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>Sana Özel</Text>
+              </View>
+              <TouchableOpacity onPress={navigateToAllEvents} accessibilityRole="button" accessibilityLabel="Tüm etkinlikleri gör">
+                <Text style={{ color: Colors.primaryLight, fontSize: FontSize.sm, fontWeight: FontWeight.semibold }}>
+                  Tümü
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.forYouList}
+            >
+              {forYouEvents.map((event) => (
+                <ForYouCard key={event.id} event={event} />
+              ))}
+            </ScrollView>
+          </View>
+        )}
 
         {/* Upcoming Events */}
         <View style={styles.section}>
@@ -257,7 +359,7 @@ const styles = StyleSheet.create({
   heroContent: { gap: Spacing.sm, flex: 1, zIndex: 1 },
   heroLabel: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.7)', fontWeight: FontWeight.semibold, letterSpacing: 1, textTransform: 'uppercase' },
   heroTitle: { fontSize: FontSize.lg, color: '#fff', fontWeight: FontWeight.bold, lineHeight: FontSize.lg * 1.3 },
-  heroMeta: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs },
+  heroMeta: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, flexWrap: 'wrap' },
   heroMetaText: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.8)', fontWeight: FontWeight.medium },
   heroBtn: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, backgroundColor: '#fff', borderRadius: BorderRadius.lg, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs + 2, alignSelf: 'flex-start' },
   heroBtnText: { fontSize: FontSize.sm, color: Colors.primary, fontWeight: FontWeight.semibold },
@@ -266,10 +368,24 @@ const styles = StyleSheet.create({
   section: { gap: Spacing.md },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionTitle: { fontSize: FontSize.md, fontWeight: FontWeight.bold },
+  forYouHeading: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  sparkleWrap: { width: 26, height: 26, borderRadius: BorderRadius.sm, alignItems: 'center', justifyContent: 'center' },
   quickActions: { flexDirection: 'row', gap: Spacing.sm },
   quickAction: { flex: 1, alignItems: 'center', borderRadius: BorderRadius.xl, borderWidth: 1, padding: Spacing.md, gap: Spacing.sm },
   quickActionIcon: { width: 44, height: 44, borderRadius: BorderRadius.md, alignItems: 'center', justifyContent: 'center' },
   quickActionLabel: { fontSize: FontSize.xs, fontWeight: FontWeight.medium, textAlign: 'center', lineHeight: FontSize.xs * 1.4 },
+  forYouList: { gap: Spacing.sm, paddingBottom: Spacing.xs },
+  forYouCard: { width: 180, borderRadius: BorderRadius.xl, borderWidth: 1, overflow: 'hidden' },
+  forYouGradient: { height: 72, alignItems: 'center', justifyContent: 'center' },
+  forYouIcon: { width: 40, height: 40, borderRadius: BorderRadius.md, alignItems: 'center', justifyContent: 'center' },
+  forYouContent: { padding: Spacing.md, gap: Spacing.xs },
+  forYouTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.semibold, lineHeight: FontSize.sm * 1.4 },
+  forYouSub: { fontSize: FontSize.xs, lineHeight: FontSize.xs * 1.4 },
+  forYouMeta: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginTop: 2 },
+  forYouDays: { paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: BorderRadius.full },
+  forYouDaysText: { fontSize: FontSize.xs, fontWeight: FontWeight.bold },
+  forYouInterest: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  forYouInterestText: { fontSize: FontSize.xs },
   eventList: { gap: Spacing.sm },
   emptyText: { textAlign: 'center', fontSize: FontSize.sm, paddingVertical: Spacing.xl },
   scannerBanner: { borderRadius: BorderRadius.xl, overflow: 'hidden' },
