@@ -75,4 +75,8 @@ export const Colors = {
     success: ['#22C55E', '#16A34A'],
     hero: ['#4F46E5', '#7C3AED'],
   },
+
+  // Neutral palette — use for static colors independent of theme
+  textSecondary: '#9898B3',
+  textMuted: '#5A5A78',
 } as const;

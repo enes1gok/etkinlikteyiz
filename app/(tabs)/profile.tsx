@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   Text,
@@ -41,6 +41,8 @@ function MenuRow({ icon, label, value, onPress, color, chevron = true }: MenuIte
       disabled={!onPress}
       activeOpacity={0.75}
       style={[styles.menuRow, { borderBottomColor: theme.border }]}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={value ? `${label}: ${value}` : label}
     >
       <View style={[styles.menuIcon, { backgroundColor: `${color ?? Colors.primary}22` }]}>
         <Ionicons name={icon} size={18} color={color ?? Colors.primary} />
@@ -63,12 +65,12 @@ export default function ProfileScreen() {
   const { events } = useEventsStore();
 
   const userEvents = events.filter((e) => user?.eventsRegistered.includes(e.id));
-  const attended = userEvents.filter((e) => e.status === 'completed');
 
   const roleLabel = user?.role === 'admin' ? 'Yönetici' : user?.role === 'organizer' ? 'Organizatör' : 'Üye';
-  const roleVariant: 'primary' | 'warning' | 'success' = user?.role === 'admin' ? 'warning' : user?.role === 'organizer' ? 'primary' : 'success';
+  const roleVariant: 'primary' | 'warning' | 'success' =
+    user?.role === 'admin' ? 'warning' : user?.role === 'organizer' ? 'primary' : 'success';
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     Alert.alert('Çıkış Yap', 'Hesabından çıkmak istediğinden emin misin?', [
       { text: 'İptal', style: 'cancel' },
       {
@@ -80,7 +82,7 @@ export default function ProfileScreen() {
         },
       },
     ]);
-  };
+  }, [logout]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
@@ -130,7 +132,11 @@ export default function ProfileScreen() {
             { label: 'Katıldım', value: user?.eventsAttended ?? 0, icon: 'checkmark-circle-outline' as const, color: Colors.success },
             { label: 'Üyelik', value: formatDate(user?.joinedAt ?? '').split(' ').slice(1).join(' '), icon: 'time-outline' as const, color: Colors.secondary },
           ].map((stat) => (
-            <View key={stat.label} style={[styles.statCard, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}>
+            <View
+              key={stat.label}
+              style={[styles.statCard, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}
+              accessibilityLabel={`${stat.label}: ${stat.value}`}
+            >
               <Ionicons name={stat.icon} size={20} color={stat.color} />
               <Text style={[styles.statValue, { color: theme.text }]}>{stat.value}</Text>
               <Text style={[styles.statLabel, { color: theme.textSecondary }]}>{stat.label}</Text>
@@ -158,10 +164,15 @@ export default function ProfileScreen() {
           <Text style={[styles.menuSectionTitle, { color: theme.textMuted }]}>Destek</Text>
           <MenuRow icon="help-circle-outline" label="Yardım & SSS" color={Colors.warning} onPress={() => {}} />
           <MenuRow icon="chatbubble-outline" label="Geri Bildirim" color={Colors.success} onPress={() => {}} />
-          <MenuRow icon="document-text-outline" label="Kullanım Koşulları" color={Colors.textSecondary as never} onPress={() => {}} />
+          <MenuRow icon="document-text-outline" label="Kullanım Koşulları" color={Colors.textSecondary} onPress={() => {}} />
         </View>
 
-        <TouchableOpacity onPress={handleLogout} style={[styles.logoutBtn, { backgroundColor: Colors.errorMuted, borderColor: `${Colors.error}40` }]}>
+        <TouchableOpacity
+          onPress={handleLogout}
+          style={[styles.logoutBtn, { backgroundColor: Colors.errorMuted, borderColor: `${Colors.error}40` }]}
+          accessibilityRole="button"
+          accessibilityLabel="Hesaptan çıkış yap"
+        >
           <Ionicons name="log-out-outline" size={20} color={Colors.error} />
           <Text style={[styles.logoutText, { color: Colors.error }]}>Çıkış Yap</Text>
         </TouchableOpacity>

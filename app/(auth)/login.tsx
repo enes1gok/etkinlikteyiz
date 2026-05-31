@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,27 +20,38 @@ import { Colors } from '../../src/theme/colors';
 import { FontSize, FontWeight } from '../../src/theme/typography';
 import { BorderRadius, Spacing } from '../../src/theme/spacing';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function LoginScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
 
-  const { login, isLoading } = useAuthStore();
-  const [email, setEmail] = useState('ahmet.yilmaz@itu.edu.tr');
+  const { login, isLoading, error, clearError } = useAuthStore();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
 
-  const validate = () => {
-    const e: typeof errors = {};
-    if (!email.includes('@')) e.email = 'Geçerli bir e-posta girin.';
-    if (password.length < 4) e.password = 'Şifre en az 4 karakter olmalı.';
-    setErrors(e);
+  // Clear store error when user starts typing
+  useEffect(() => {
+    if (error) clearError();
+  }, [email, password]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const validate = (): boolean => {
+    const e: typeof fieldErrors = {};
+    if (!EMAIL_REGEX.test(email.trim())) {
+      e.email = 'Geçerli bir e-posta adresi girin.';
+    }
+    if (password.length < 4) {
+      e.password = 'Şifre en az 4 karakter olmalı.';
+    }
+    setFieldErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const handleLogin = async () => {
     if (!validate()) return;
-    const ok = await login(email, password || '1234');
+    const ok = await login(email.trim(), password);
     if (ok) router.replace('/(tabs)');
   };
 
@@ -69,6 +80,14 @@ export default function LoginScreen() {
               Devam etmek için giriş yapın
             </Text>
 
+            {/* Auth error banner */}
+            {error && (
+              <View style={[styles.errorBanner, { backgroundColor: Colors.errorMuted, borderColor: `${Colors.error}40` }]}>
+                <Ionicons name="alert-circle-outline" size={16} color={Colors.error} />
+                <Text style={[styles.errorBannerText, { color: Colors.error }]}>{error}</Text>
+              </View>
+            )}
+
             <View style={styles.form}>
               <Input
                 label="Kurumsal E-posta"
@@ -76,8 +95,9 @@ export default function LoginScreen() {
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                autoComplete="email"
                 leftIcon="mail-outline"
-                error={errors.email}
+                error={fieldErrors.email}
                 placeholder="ad.soyad@universite.edu.tr"
               />
               <Input
@@ -85,12 +105,17 @@ export default function LoginScreen() {
                 value={password}
                 onChangeText={setPassword}
                 isPassword
+                autoComplete="password"
                 leftIcon="lock-closed-outline"
-                error={errors.password}
+                error={fieldErrors.password}
                 placeholder="••••••••"
               />
 
-              <TouchableOpacity style={styles.forgot}>
+              <TouchableOpacity
+                style={styles.forgot}
+                accessibilityRole="button"
+                accessibilityLabel="Şifremi unuttum"
+              >
                 <Text style={{ color: Colors.primaryLight, fontSize: FontSize.sm, fontWeight: FontWeight.medium }}>
                   Şifremi unuttum
                 </Text>
@@ -110,7 +135,11 @@ export default function LoginScreen() {
             <Text style={{ color: theme.textSecondary, fontSize: FontSize.sm }}>
               Hesabın yok mu?
             </Text>
-            <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
+            <TouchableOpacity
+              onPress={() => router.push('/(auth)/register')}
+              accessibilityRole="button"
+              accessibilityLabel="Kayıt ol sayfasına git"
+            >
               <Text style={{ color: Colors.primaryLight, fontSize: FontSize.sm, fontWeight: FontWeight.semibold }}>
                 {' '}Kayıt Ol
               </Text>
@@ -171,6 +200,19 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     fontSize: FontSize.sm,
     marginBottom: Spacing.sm,
+  },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
   },
   form: {
     gap: Spacing.md,

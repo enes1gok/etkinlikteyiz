@@ -5,3 +5,4 @@ export { Badge } from './Badge';
 export { Avatar } from './Avatar';
 export { StatCard } from './StatCard';
 export { ProgressBar } from './ProgressBar';
+export { ErrorBoundary } from './ErrorBoundary';
