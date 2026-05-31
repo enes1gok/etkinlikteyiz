@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   useColorScheme,
   Share,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,7 +32,7 @@ import {
   getEventStatusLabel,
 } from '../../src/utils/helpers';
 
-const statusVariants: Record<string, 'primary' | 'success' | 'warning' | 'error' | 'neutral'> = {
+const STATUS_VARIANTS: Record<string, 'primary' | 'success' | 'warning' | 'error' | 'neutral'> = {
   upcoming: 'primary',
   ongoing: 'success',
   completed: 'neutral',
@@ -44,17 +45,50 @@ export default function EventDetailScreen() {
   const isDark = scheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
 
-  const { events, attendees, selectEvent, selectedEvent, registerForEvent } = useEventsStore();
+  const { events, attendees, selectEvent, selectedEvent, registerForEvent, isLoading } = useEventsStore();
   const { user } = useAuthStore();
   const [registering, setRegistering] = useState(false);
   const [showQR, setShowQR] = useState(false);
 
   useEffect(() => {
     if (id) selectEvent(id);
-  }, [id]);
+  }, [id, selectEvent]);
 
   const event = selectedEvent ?? events.find((e) => e.id === id);
-  if (!event) return null;
+
+  // Show loading while store hydrates
+  if (isLoading && !event) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Event not found after loading
+  if (!event) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
+        <View style={styles.centered}>
+          <Ionicons name="calendar-outline" size={64} color={theme.textMuted} />
+          <Text style={[styles.notFoundTitle, { color: theme.text }]}>Etkinlik Bulunamadı</Text>
+          <Text style={[styles.notFoundSub, { color: theme.textSecondary }]}>
+            Bu etkinlik mevcut değil veya kaldırılmış.
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={[styles.backLink, { backgroundColor: Colors.primaryMuted }]}
+            accessibilityRole="button"
+            accessibilityLabel="Geri dön"
+          >
+            <Text style={{ color: Colors.primaryLight, fontWeight: FontWeight.semibold }}>Geri Dön</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const eventAttendees = attendees.filter((a) => a.eventId === event.id);
   const isRegistered = user?.eventsRegistered.includes(event.id) ?? false;
@@ -66,17 +100,28 @@ export default function EventDetailScreen() {
   const handleRegister = async () => {
     if (!user) return;
     setRegistering(true);
-    await registerForEvent(event.id, user.id);
+    const ok = await registerForEvent(event.id, user.id);
     setRegistering(false);
-    Alert.alert('Kayıt Başarılı!', 'Etkinliğe kaydoldunuz. QR kodunuzu etkinlik girişinde gösterin.', [{ text: 'QR Kodu Göster', onPress: () => setShowQR(true) }, { text: 'Tamam' }]);
+    if (ok) {
+      Alert.alert(
+        'Kayıt Başarılı!',
+        'Etkinliğe kaydoldunuz. QR kodunuzu etkinlik girişinde gösterin.',
+        [
+          { text: 'QR Kodu Göster', onPress: () => setShowQR(true) },
+          { text: 'Tamam' },
+        ]
+      );
+    } else {
+      Alert.alert('Hata', 'Kayıt işlemi sırasında bir sorun oluştu. Lütfen tekrar deneyin.');
+    }
   };
 
-  const handleShare = () => {
+  const handleShare = useCallback(() => {
     Share.share({
       title: event.title,
       message: `${event.title}\n${formatDate(event.date)} · ${event.startTime}\n${event.location}\n\nUniComm ile keşfet!`,
     });
-  };
+  }, [event]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
@@ -87,10 +132,20 @@ export default function EventDetailScreen() {
           style={styles.header}
         >
           <View style={styles.headerTop}>
-            <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.8)' }]}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={[styles.backBtn, { backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.8)' }]}
+              accessibilityRole="button"
+              accessibilityLabel="Geri dön"
+            >
               <Ionicons name="arrow-back" size={20} color={theme.text} />
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleShare} style={[styles.shareBtn, { backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.8)' }]}>
+            <TouchableOpacity
+              onPress={handleShare}
+              style={[styles.shareBtn, { backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.8)' }]}
+              accessibilityRole="button"
+              accessibilityLabel="Etkinliği paylaş"
+            >
               <Ionicons name="share-outline" size={20} color={theme.text} />
             </TouchableOpacity>
           </View>
@@ -98,7 +153,7 @@ export default function EventDetailScreen() {
           <View style={styles.heroContent}>
             <View style={styles.badgeRow}>
               <Badge label={getEventCategoryLabel(event.category)} variant="primary" />
-              <Badge label={getEventStatusLabel(event.status)} variant={statusVariants[event.status] ?? 'neutral'} dot />
+              <Badge label={getEventStatusLabel(event.status)} variant={STATUS_VARIANTS[event.status] ?? 'neutral'} dot />
             </View>
             <Text style={[styles.eventTitle, { color: theme.text }]}>{event.title}</Text>
             <Text style={[styles.communityName, { color: categoryColor }]}>{event.communityName}</Text>
@@ -113,7 +168,11 @@ export default function EventDetailScreen() {
             { icon: 'location-outline' as const, label: 'Konum', value: event.location },
             { icon: 'people-outline' as const, label: 'Kapasite', value: `${event.registeredCount}/${event.maxCapacity}` },
           ].map((info) => (
-            <View key={info.label} style={[styles.infoCard, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}>
+            <View
+              key={info.label}
+              style={[styles.infoCard, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}
+              accessibilityLabel={`${info.label}: ${info.value}`}
+            >
               <View style={[styles.infoIcon, { backgroundColor: `${categoryColor}22` }]}>
                 <Ionicons name={info.icon} size={16} color={categoryColor} />
               </View>
@@ -259,7 +318,7 @@ export default function EventDetailScreen() {
           </View>
         ) : event.isRegistrationOpen && event.status === 'upcoming' ? (
           <Button
-            label="Kayıt Ol"
+            label={capacityRate >= 100 ? 'Kontenjan Dolu' : 'Kayıt Ol'}
             onPress={handleRegister}
             loading={registering}
             fullWidth
@@ -277,6 +336,10 @@ export default function EventDetailScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { paddingBottom: 120 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md, padding: Spacing['2xl'] },
+  notFoundTitle: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, textAlign: 'center' },
+  notFoundSub: { fontSize: FontSize.sm, textAlign: 'center', lineHeight: FontSize.sm * 1.6 },
+  backLink: { paddingHorizontal: Spacing.xl, paddingVertical: Spacing.sm + 2, borderRadius: BorderRadius.lg, marginTop: Spacing.sm },
   header: { padding: Spacing.base, gap: Spacing.md, paddingTop: Spacing.base },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between' },
   backBtn: { width: 40, height: 40, borderRadius: BorderRadius.md, alignItems: 'center', justifyContent: 'center' },

@@ -1,24 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   useColorScheme,
-  Alert,
-  Vibration,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useEventsStore } from '../../src/store/eventsStore';
-import { useAuthStore } from '../../src/store/authStore';
 import { Avatar } from '../../src/components/ui/Avatar';
-import { Badge } from '../../src/components/ui/Badge';
 import { Colors } from '../../src/theme/colors';
 import { FontSize, FontWeight } from '../../src/theme/typography';
 import { BorderRadius, Spacing } from '../../src/theme/spacing';
@@ -40,14 +37,15 @@ export default function ScannerScreen() {
   const [selectedEventId, setSelectedEventId] = useState<string>(eventId ?? '');
 
   const { events, checkInByQR, fetchEvents } = useEventsStore();
-  const { user } = useAuthStore();
 
-  useEffect(() => { fetchEvents(); }, []);
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
 
   const upcomingEvents = events.filter((e) => e.status === 'upcoming');
   const activeEvent = events.find((e) => e.id === selectedEventId);
 
-  const handleBarcodeScanned = async ({ data }: { data: string }) => {
+  const handleBarcodeScanned = useCallback(async ({ data }: { data: string }) => {
     if (scanned || !selectedEventId) return;
     setScanned(true);
 
@@ -65,9 +63,18 @@ export default function ScannerScreen() {
       setScanned(false);
       setLastResult(null);
     }, 2500);
-  };
+  }, [scanned, selectedEventId, checkInByQR]);
 
-  if (!permission) return <View />;
+  // Permission loading state
+  if (!permission) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!permission.granted) {
     return (
@@ -78,7 +85,12 @@ export default function ScannerScreen() {
           <Text style={[styles.permText, { color: theme.textSecondary }]}>
             QR kodları okumak için kamera erişimine izin verin.
           </Text>
-          <TouchableOpacity onPress={requestPermission} style={styles.permBtn}>
+          <TouchableOpacity
+            onPress={requestPermission}
+            style={styles.permBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Kamera iznine izin ver"
+          >
             <LinearGradient colors={[Colors.primary, Colors.secondary]} style={styles.permBtnGrad}>
               <Text style={styles.permBtnText}>İzin Ver</Text>
             </LinearGradient>
@@ -107,7 +119,12 @@ export default function ScannerScreen() {
         {/* Top Bar */}
         <SafeAreaView>
           <View style={styles.topBar}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              style={styles.iconBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Geri dön"
+            >
               <Ionicons name="close" size={24} color="#fff" />
             </TouchableOpacity>
             <View style={styles.topCenter}>
@@ -123,20 +140,26 @@ export default function ScannerScreen() {
           {!selectedEventId && (
             <View style={styles.eventSelector}>
               <Text style={styles.selectorTitle}>Etkinlik Seç</Text>
-              {upcomingEvents.map((e) => (
-                <TouchableOpacity
-                  key={e.id}
-                  onPress={() => setSelectedEventId(e.id)}
-                  style={styles.selectorItem}
-                >
-                  <Ionicons name="calendar-outline" size={16} color={Colors.primaryLight} />
-                  <View style={styles.selectorInfo}>
-                    <Text style={styles.selectorName} numberOfLines={1}>{e.title}</Text>
-                    <Text style={styles.selectorMeta}>{formatShortDate(e.date)} · {e.registeredCount} kayıt</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.5)" />
-                </TouchableOpacity>
-              ))}
+              {upcomingEvents.length === 0 ? (
+                <Text style={styles.selectorEmpty}>Yaklaşan etkinlik bulunamadı.</Text>
+              ) : (
+                upcomingEvents.map((e) => (
+                  <TouchableOpacity
+                    key={e.id}
+                    onPress={() => setSelectedEventId(e.id)}
+                    style={styles.selectorItem}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${e.title} etkinliğini seç`}
+                  >
+                    <Ionicons name="calendar-outline" size={16} color={Colors.primaryLight} />
+                    <View style={styles.selectorInfo}>
+                      <Text style={styles.selectorName} numberOfLines={1}>{e.title}</Text>
+                      <Text style={styles.selectorMeta}>{formatShortDate(e.date)} · {e.registeredCount} kayıt</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.5)" />
+                  </TouchableOpacity>
+                ))
+              )}
             </View>
           )}
         </SafeAreaView>
@@ -214,6 +237,8 @@ export default function ScannerScreen() {
             <TouchableOpacity
               onPress={() => setSelectedEventId('')}
               style={styles.changeEventBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Etkinliği değiştir"
             >
               <Ionicons name="swap-horizontal-outline" size={16} color="rgba(255,255,255,0.7)" />
               <Text style={styles.changeEventText}>Etkinlik Değiştir</Text>
@@ -230,6 +255,7 @@ const CORNER_BORDER = 3;
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   container: { flex: 1, backgroundColor: '#000' },
   overlay: { flex: 1, justifyContent: 'space-between' },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.base, paddingVertical: Spacing.sm, backgroundColor: 'rgba(0,0,0,0.6)' },
@@ -239,6 +265,7 @@ const styles = StyleSheet.create({
   topSub: { color: 'rgba(255,255,255,0.7)', fontSize: FontSize.xs, marginTop: 2 },
   eventSelector: { backgroundColor: 'rgba(0,0,0,0.85)', margin: Spacing.base, borderRadius: BorderRadius.xl, padding: Spacing.base, gap: Spacing.sm },
   selectorTitle: { color: '#fff', fontSize: FontSize.base, fontWeight: FontWeight.semibold, marginBottom: Spacing.xs },
+  selectorEmpty: { color: 'rgba(255,255,255,0.5)', fontSize: FontSize.sm, textAlign: 'center', paddingVertical: Spacing.md },
   selectorItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(255,255,255,0.15)' },
   selectorInfo: { flex: 1 },
   selectorName: { color: '#fff', fontSize: FontSize.sm, fontWeight: FontWeight.medium },

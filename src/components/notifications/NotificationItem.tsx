@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Notification, NotificationType } from '../../types';
@@ -22,7 +22,7 @@ interface NotificationItemProps {
   onPress: () => void;
 }
 
-export function NotificationItem({ notification, onPress }: NotificationItemProps) {
+export const NotificationItem = memo(function NotificationItem({ notification, onPress }: NotificationItemProps) {
   const { isDark, theme } = useColorScheme();
   const config = typeConfig[notification.type];
 
@@ -39,6 +39,9 @@ export function NotificationItem({ notification, onPress }: NotificationItemProp
           borderColor: notification.read ? theme.border : `${Colors.primary}40`,
         },
       ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${notification.title}. ${notification.body}. ${formatRelativeTime(notification.createdAt)}`}
+      accessibilityState={{ selected: !notification.read }}
     >
       <View style={[styles.iconBox, { backgroundColor: `${config.color}22` }]}>
         <Ionicons name={config.icon} size={20} color={config.color} />
@@ -60,7 +63,7 @@ export function NotificationItem({ notification, onPress }: NotificationItemProp
       <Ionicons name="chevron-forward" size={16} color={theme.textMuted} />
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

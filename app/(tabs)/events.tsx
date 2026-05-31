@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   TextInput,
   useColorScheme,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import { Event, EventStatus } from '../../src/types';
 import { Colors } from '../../src/theme/colors';
 import { FontSize, FontWeight } from '../../src/theme/typography';
 import { BorderRadius, Spacing } from '../../src/theme/spacing';
+import { useDebounce } from '../../src/hooks/useDebounce';
 
 type FilterTab = 'all' | EventStatus;
 
@@ -34,16 +36,36 @@ export default function EventsScreen() {
 
   const { events, fetchEvents, isLoading } = useEventsStore();
   const [filter, setFilter] = useState<FilterTab>('all');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const debouncedSearch = useDebounce(searchInput, 300);
 
-  useEffect(() => { fetchEvents(); }, []);
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
 
-  const filtered = events.filter((e) => {
-    const matchStatus = filter === 'all' || e.status === filter;
-    const matchSearch = e.title.toLowerCase().includes(search.toLowerCase()) ||
-      e.communityName.toLowerCase().includes(search.toLowerCase());
-    return matchStatus && matchSearch;
-  });
+  const filtered = useMemo(() => {
+    const q = debouncedSearch.toLowerCase();
+    return events.filter((e) => {
+      const matchStatus = filter === 'all' || e.status === filter;
+      const matchSearch =
+        !q ||
+        e.title.toLowerCase().includes(q) ||
+        e.communityName.toLowerCase().includes(q);
+      return matchStatus && matchSearch;
+    });
+  }, [events, filter, debouncedSearch]);
+
+  const handleCreateEvent = useCallback(() => router.push('/events/create'), []);
+  const clearSearch = useCallback(() => setSearchInput(''), []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: Event }) => (
+      <EventCard event={item} onPress={() => router.push(`/events/${item.id}`)} />
+    ),
+    []
+  );
+
+  const keyExtractor = useCallback((item: Event) => item.id, []);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
@@ -51,14 +73,20 @@ export default function EventsScreen() {
         <View>
           <Text style={[styles.title, { color: theme.text }]}>Etkinlikler</Text>
           <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            {events.length} etkinlik
+            {isLoading ? 'Yükleniyor...' : `${filtered.length} etkinlik`}
           </Text>
         </View>
         <TouchableOpacity
-          onPress={() => router.push('/events/create')}
+          onPress={handleCreateEvent}
           style={[styles.createBtn, { backgroundColor: Colors.primary }]}
+          accessibilityRole="button"
+          accessibilityLabel="Yeni etkinlik oluştur"
         >
-          <Ionicons name="add" size={20} color="#fff" />
+          {isLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="add" size={20} color="#fff" />
+          )}
         </TouchableOpacity>
       </View>
 
@@ -66,14 +94,21 @@ export default function EventsScreen() {
       <View style={[styles.searchBox, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}>
         <Ionicons name="search-outline" size={18} color={theme.textMuted} />
         <TextInput
-          value={search}
-          onChangeText={setSearch}
+          value={searchInput}
+          onChangeText={setSearchInput}
           placeholder="Etkinlik veya topluluk ara..."
           placeholderTextColor={theme.textMuted}
           style={[styles.searchInput, { color: theme.text }]}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+          accessibilityLabel="Etkinlik ara"
         />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
+        {searchInput.length > 0 && (
+          <TouchableOpacity
+            onPress={clearSearch}
+            accessibilityRole="button"
+            accessibilityLabel="Aramayı temizle"
+          >
             <Ionicons name="close-circle" size={18} color={theme.textMuted} />
           </TouchableOpacity>
         )}
@@ -93,6 +128,9 @@ export default function EventsScreen() {
                   ? { backgroundColor: Colors.primary }
                   : { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border, borderWidth: 1 },
               ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={f.label}
             >
               <Text style={[styles.filterText, { color: active ? '#fff' : theme.textSecondary }]}>
                 {f.label}
@@ -104,20 +142,20 @@ export default function EventsScreen() {
 
       <FlatList
         data={filtered}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <EventCard
-            event={item}
-            onPress={() => router.push(`/events/${item.id}`)}
-          />
-        )}
+        keyExtractor={keyExtractor}
+        renderItem={renderItem}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
+        removeClippedSubviews
+        maxToRenderPerBatch={8}
+        windowSize={10}
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="calendar-outline" size={48} color={theme.textMuted} />
-            <Text style={[styles.emptyText, { color: theme.textMuted }]}>Etkinlik bulunamadı</Text>
+            <Text style={[styles.emptyText, { color: theme.textMuted }]}>
+              {debouncedSearch ? `"${debouncedSearch}" için sonuç bulunamadı` : 'Etkinlik bulunamadı'}
+            </Text>
           </View>
         }
       />
@@ -138,5 +176,5 @@ const styles = StyleSheet.create({
   filterText: { fontSize: FontSize.sm, fontWeight: FontWeight.medium },
   list: { padding: Spacing.base, paddingTop: 0, paddingBottom: Spacing['3xl'] },
   empty: { alignItems: 'center', paddingVertical: Spacing['4xl'], gap: Spacing.md },
-  emptyText: { fontSize: FontSize.base },
+  emptyText: { fontSize: FontSize.base, textAlign: 'center' },
 });

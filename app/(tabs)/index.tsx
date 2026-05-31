@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,11 +17,17 @@ import { useEventsStore } from '../../src/store/eventsStore';
 import { useNotificationsStore } from '../../src/store/notificationsStore';
 import { EventCard } from '../../src/components/events/EventCard';
 import { StatCard } from '../../src/components/ui/StatCard';
-import { Avatar } from '../../src/components/ui/Avatar';
 import { Colors } from '../../src/theme/colors';
 import { FontSize, FontWeight } from '../../src/theme/typography';
 import { BorderRadius, Spacing } from '../../src/theme/spacing';
 import { getAttendanceRate } from '../../src/utils/helpers';
+
+const QUICK_ACTIONS = [
+  { icon: 'add-circle-outline' as const, label: 'Etkinlik\nOluştur', route: '/events/create', color: Colors.primary },
+  { icon: 'qr-code-outline' as const, label: 'QR\nOku', route: '/scanner', color: Colors.success },
+  { icon: 'stats-chart-outline' as const, label: 'İstatistik', route: '/(tabs)/members', color: Colors.warning },
+  { icon: 'megaphone-outline' as const, label: 'Bildirim\nGönder', route: '/(tabs)/notifications', color: Colors.secondary },
+] as const;
 
 export default function HomeScreen() {
   const scheme = useColorScheme();
@@ -32,23 +38,33 @@ export default function HomeScreen() {
   const { events, fetchEvents, isLoading } = useEventsStore();
   const { fetchNotifications, unreadCount } = useNotificationsStore();
 
+  const userId = user?.id;
+
   useEffect(() => {
     fetchEvents();
-    if (user) fetchNotifications(user.id);
-  }, []);
+    if (userId) fetchNotifications(userId);
+  }, [fetchEvents, fetchNotifications, userId]);
 
-  const upcomingEvents = events.filter((e) => e.status === 'upcoming').slice(0, 3);
-  const completedEvents = events.filter((e) => e.status === 'completed');
-  const totalCheckedIn = completedEvents.reduce((s, e) => s + e.checkedInCount, 0);
-  const totalRegistered = completedEvents.reduce((s, e) => s + e.registeredCount, 0);
-  const avgAttendance = getAttendanceRate(totalCheckedIn, totalRegistered);
+  const upcomingEvents = useMemo(
+    () => events.filter((e) => e.status === 'upcoming').slice(0, 3),
+    [events]
+  );
 
-  const quickActions = [
-    { icon: 'add-circle-outline' as const, label: 'Etkinlik\nOluştur', route: '/events/create', color: Colors.primary },
-    { icon: 'qr-code-outline' as const, label: 'QR\nOku', route: '/scanner', color: Colors.success },
-    { icon: 'stats-chart-outline' as const, label: 'İstatistik', route: '/(tabs)/members', color: Colors.warning },
-    { icon: 'megaphone-outline' as const, label: 'Bildirim\nGönder', route: '/(tabs)/notifications', color: Colors.secondary },
-  ];
+  const { avgAttendance } = useMemo(() => {
+    const completedEvents = events.filter((e) => e.status === 'completed');
+    const totalCheckedIn = completedEvents.reduce((s, e) => s + e.checkedInCount, 0);
+    const totalRegistered = completedEvents.reduce((s, e) => s + e.registeredCount, 0);
+    return { avgAttendance: getAttendanceRate(totalCheckedIn, totalRegistered) };
+  }, [events]);
+
+  const handleRefresh = useCallback(() => {
+    fetchEvents();
+    if (userId) fetchNotifications(userId);
+  }, [fetchEvents, fetchNotifications, userId]);
+
+  const navigateToNotifications = useCallback(() => router.push('/(tabs)/notifications'), []);
+  const navigateToAllEvents = useCallback(() => router.push('/(tabs)/events'), []);
+  const navigateToScanner = useCallback(() => router.push('/scanner'), []);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
@@ -56,7 +72,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
         refreshControl={
-          <RefreshControl refreshing={isLoading} onRefresh={fetchEvents} tintColor={Colors.primary} />
+          <RefreshControl refreshing={isLoading} onRefresh={handleRefresh} tintColor={Colors.primary} />
         }
       >
         {/* Header */}
@@ -69,7 +85,12 @@ export default function HomeScreen() {
               {community?.shortName}
             </Text>
           </View>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/notifications')} style={styles.notifBtn}>
+          <TouchableOpacity
+            onPress={navigateToNotifications}
+            style={styles.notifBtn}
+            accessibilityRole="button"
+            accessibilityLabel={`Bildirimler${unreadCount > 0 ? `, ${unreadCount} okunmamış` : ''}`}
+          >
             <Ionicons name="notifications-outline" size={22} color={theme.text} />
             {unreadCount > 0 && (
               <View style={styles.notifBadge}>
@@ -102,6 +123,8 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   onPress={() => router.push(`/events/${upcomingEvents[0].id}`)}
                   style={styles.heroBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${upcomingEvents[0].title} etkinliğinin detaylarını gör`}
                 >
                   <Text style={styles.heroBtnText}>Detayları Gör</Text>
                   <Ionicons name="arrow-forward" size={14} color={Colors.primary} />
@@ -143,11 +166,13 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Hızlı İşlemler</Text>
           <View style={styles.quickActions}>
-            {quickActions.map((action) => (
+            {QUICK_ACTIONS.map((action) => (
               <TouchableOpacity
                 key={action.label}
                 onPress={() => router.push(action.route as never)}
                 style={[styles.quickAction, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}
+                accessibilityRole="button"
+                accessibilityLabel={action.label.replace('\n', ' ')}
               >
                 <View style={[styles.quickActionIcon, { backgroundColor: `${action.color}22` }]}>
                   <Ionicons name={action.icon} size={22} color={action.color} />
@@ -164,7 +189,11 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Yaklaşan Etkinlikler</Text>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/events')}>
+            <TouchableOpacity
+              onPress={navigateToAllEvents}
+              accessibilityRole="button"
+              accessibilityLabel="Tüm etkinlikleri gör"
+            >
               <Text style={{ color: Colors.primaryLight, fontSize: FontSize.sm, fontWeight: FontWeight.semibold }}>
                 Tümü
               </Text>
@@ -187,10 +216,12 @@ export default function HomeScreen() {
         </View>
 
         {/* Role Banner */}
-        {user?.role === 'admin' || user?.role === 'organizer' ? (
+        {(user?.role === 'admin' || user?.role === 'organizer') && (
           <TouchableOpacity
-            onPress={() => router.push('/scanner')}
+            onPress={navigateToScanner}
             style={styles.scannerBanner}
+            accessibilityRole="button"
+            accessibilityLabel="QR kod okuyucuyu aç"
           >
             <LinearGradient
               colors={[Colors.success, '#16A34A']}
@@ -206,7 +237,7 @@ export default function HomeScreen() {
               <Ionicons name="arrow-forward-circle" size={24} color="rgba(255,255,255,0.7)" />
             </LinearGradient>
           </TouchableOpacity>
-        ) : null}
+        )}
       </ScrollView>
     </SafeAreaView>
   );

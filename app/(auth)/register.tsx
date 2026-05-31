@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,27 +20,42 @@ import { FontSize, FontWeight } from '../../src/theme/typography';
 import { BorderRadius, Spacing } from '../../src/theme/spacing';
 import { MOCK_COMMUNITIES } from '../../src/utils/mockData';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type FormField = 'name' | 'email' | 'studentId' | 'password' | 'confirmPassword';
+
 export default function RegisterScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? Colors.dark : Colors.light;
 
-  const { register, isLoading } = useAuthStore();
-  const [form, setForm] = useState({ name: '', email: '', studentId: '', password: '', confirmPassword: '' });
+  const { register, isLoading, error, clearError } = useAuthStore();
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    studentId: '',
+    password: '',
+    confirmPassword: '',
+  });
   const [selectedCommunity, setSelectedCommunity] = useState(MOCK_COMMUNITIES[0].id);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
 
-  const set = (field: keyof typeof form) => (val: string) =>
+  // Clear store error when user edits any field
+  useEffect(() => {
+    if (error) clearError();
+  }, [form.email, form.password]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setField = (field: FormField) => (val: string) =>
     setForm((prev) => ({ ...prev, [field]: val }));
 
-  const validate = () => {
-    const e: Record<string, string> = {};
+  const validate = (): boolean => {
+    const e: Partial<Record<FormField, string>> = {};
     if (!form.name.trim()) e.name = 'İsim gerekli.';
-    if (!form.email.includes('@')) e.email = 'Geçerli bir e-posta girin.';
-    if (!form.studentId) e.studentId = 'Öğrenci numarası gerekli.';
+    if (!EMAIL_REGEX.test(form.email.trim())) e.email = 'Geçerli bir e-posta adresi girin.';
+    if (!form.studentId.trim()) e.studentId = 'Öğrenci numarası gerekli.';
     if (form.password.length < 6) e.password = 'Şifre en az 6 karakter olmalı.';
     if (form.password !== form.confirmPassword) e.confirmPassword = 'Şifreler eşleşmiyor.';
-    setErrors(e);
+    setFieldErrors(e);
     return Object.keys(e).length === 0;
   };
 
@@ -54,7 +69,12 @@ export default function RegisterScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-          <TouchableOpacity onPress={() => router.back()} style={styles.back}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.back}
+            accessibilityRole="button"
+            accessibilityLabel="Geri dön"
+          >
             <Ionicons name="arrow-back" size={22} color={theme.text} />
           </TouchableOpacity>
 
@@ -64,11 +84,62 @@ export default function RegisterScreen() {
           </Text>
 
           <View style={styles.form}>
-            <Input label="Ad Soyad" value={form.name} onChangeText={set('name')} leftIcon="person-outline" placeholder="Ahmet Yılmaz" error={errors.name} />
-            <Input label="Kurumsal E-posta" value={form.email} onChangeText={set('email')} leftIcon="mail-outline" keyboardType="email-address" autoCapitalize="none" placeholder="ad.soyad@universite.edu.tr" error={errors.email} />
-            <Input label="Öğrenci Numarası" value={form.studentId} onChangeText={set('studentId')} leftIcon="card-outline" keyboardType="numeric" placeholder="150XXXXXX" error={errors.studentId} />
-            <Input label="Şifre" value={form.password} onChangeText={set('password')} isPassword leftIcon="lock-closed-outline" placeholder="••••••••" error={errors.password} />
-            <Input label="Şifre Tekrar" value={form.confirmPassword} onChangeText={set('confirmPassword')} isPassword leftIcon="lock-closed-outline" placeholder="••••••••" error={errors.confirmPassword} />
+            {/* Auth error banner */}
+            {error && (
+              <View style={[styles.errorBanner, { backgroundColor: Colors.errorMuted, borderColor: `${Colors.error}40` }]}>
+                <Ionicons name="alert-circle-outline" size={16} color={Colors.error} />
+                <Text style={[styles.errorBannerText, { color: Colors.error }]}>{error}</Text>
+              </View>
+            )}
+
+            <Input
+              label="Ad Soyad"
+              value={form.name}
+              onChangeText={setField('name')}
+              leftIcon="person-outline"
+              placeholder="Ahmet Yılmaz"
+              error={fieldErrors.name}
+              autoComplete="name"
+            />
+            <Input
+              label="Kurumsal E-posta"
+              value={form.email}
+              onChangeText={setField('email')}
+              leftIcon="mail-outline"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+              placeholder="ad.soyad@universite.edu.tr"
+              error={fieldErrors.email}
+            />
+            <Input
+              label="Öğrenci Numarası"
+              value={form.studentId}
+              onChangeText={setField('studentId')}
+              leftIcon="card-outline"
+              keyboardType="numeric"
+              placeholder="150XXXXXX"
+              error={fieldErrors.studentId}
+            />
+            <Input
+              label="Şifre"
+              value={form.password}
+              onChangeText={setField('password')}
+              isPassword
+              leftIcon="lock-closed-outline"
+              autoComplete="new-password"
+              placeholder="••••••••"
+              error={fieldErrors.password}
+            />
+            <Input
+              label="Şifre Tekrar"
+              value={form.confirmPassword}
+              onChangeText={setField('confirmPassword')}
+              isPassword
+              leftIcon="lock-closed-outline"
+              placeholder="••••••••"
+              error={fieldErrors.confirmPassword}
+            />
 
             <View style={styles.communitySection}>
               <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Topluluk Seç</Text>
@@ -87,6 +158,9 @@ export default function RegisterScreen() {
                         borderColor: selected ? Colors.primary : theme.border,
                       },
                     ]}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`${c.name}, ${c.memberCount} üye`}
                   >
                     <View style={styles.communityInfo}>
                       <Text style={[styles.communityName, { color: theme.text }]}>{c.name}</Text>
@@ -100,13 +174,25 @@ export default function RegisterScreen() {
               })}
             </View>
 
-            <Button label="Kayıt Ol" onPress={handleRegister} loading={isLoading} fullWidth size="lg" />
+            <Button
+              label="Kayıt Ol"
+              onPress={handleRegister}
+              loading={isLoading}
+              fullWidth
+              size="lg"
+            />
           </View>
 
           <View style={styles.loginRow}>
             <Text style={{ color: theme.textSecondary, fontSize: FontSize.sm }}>Zaten hesabın var mı?</Text>
-            <TouchableOpacity onPress={() => router.back()}>
-              <Text style={{ color: Colors.primaryLight, fontSize: FontSize.sm, fontWeight: FontWeight.semibold }}>{' '}Giriş Yap</Text>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              accessibilityRole="button"
+              accessibilityLabel="Giriş yap sayfasına dön"
+            >
+              <Text style={{ color: Colors.primaryLight, fontSize: FontSize.sm, fontWeight: FontWeight.semibold }}>
+                {' '}Giriş Yap
+              </Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -122,6 +208,19 @@ const styles = StyleSheet.create({
   title: { fontSize: FontSize['2xl'], fontWeight: FontWeight.bold, letterSpacing: -0.3, marginBottom: Spacing.xs },
   subtitle: { fontSize: FontSize.base, marginBottom: Spacing.xl },
   form: { gap: Spacing.md },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+  },
   communitySection: { gap: Spacing.sm },
   sectionLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.medium },
   communityItem: { flexDirection: 'row', alignItems: 'center', borderRadius: BorderRadius.lg, borderWidth: 1.5, padding: Spacing.md, gap: Spacing.md },

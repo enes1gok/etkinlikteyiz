@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,8 +23,11 @@ import { BorderRadius, Spacing } from '../../src/theme/spacing';
 import { EventCategory } from '../../src/types';
 import { getEventCategoryLabel } from '../../src/utils/helpers';
 
-const CATEGORIES: EventCategory[] = ['workshop', 'seminar', 'social', 'competition', 'trip', 'meetup', 'conference', 'other'];
-const categoryIcons: Record<EventCategory, keyof typeof Ionicons.glyphMap> = {
+const CATEGORIES: EventCategory[] = [
+  'workshop', 'seminar', 'social', 'competition', 'trip', 'meetup', 'conference', 'other',
+];
+
+const CATEGORY_ICONS: Record<EventCategory, keyof typeof Ionicons.glyphMap> = {
   workshop: 'hammer-outline',
   seminar: 'mic-outline',
   social: 'people-outline',
@@ -34,6 +37,11 @@ const categoryIcons: Record<EventCategory, keyof typeof Ionicons.glyphMap> = {
   conference: 'business-outline',
   other: 'calendar-outline',
 };
+
+type FormField = 'title' | 'description' | 'location' | 'locationDetail' | 'date' | 'startTime' | 'endTime' | 'maxCapacity';
+
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_REGEX = /^\d{2}:\d{2}$/;
 
 export default function CreateEventScreen() {
   const scheme = useColorScheme();
@@ -54,87 +62,157 @@ export default function CreateEventScreen() {
     maxCapacity: '',
   });
   const [category, setCategory] = useState<EventCategory>('workshop');
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
 
-  const set = (field: keyof typeof form) => (val: string) =>
-    setForm((prev) => ({ ...prev, [field]: val }));
+  const setField = useCallback((field: FormField) => (val: string) =>
+    setForm((prev) => ({ ...prev, [field]: val })), []);
 
-  const validate = () => {
-    const e: Record<string, string> = {};
+  const validate = (): boolean => {
+    const e: Partial<Record<FormField, string>> = {};
     if (!form.title.trim()) e.title = 'Etkinlik başlığı gerekli.';
     if (!form.description.trim()) e.description = 'Açıklama gerekli.';
     if (!form.location.trim()) e.location = 'Konum gerekli.';
-    if (!form.date.match(/^\d{4}-\d{2}-\d{2}$/)) e.date = 'Tarih formatı: YYYY-AA-GG';
-    if (!form.startTime.match(/^\d{2}:\d{2}$/)) e.startTime = 'Saat formatı: SS:DD';
-    if (!form.endTime.match(/^\d{2}:\d{2}$/)) e.endTime = 'Saat formatı: SS:DD';
-    if (!form.maxCapacity || isNaN(Number(form.maxCapacity))) e.maxCapacity = 'Geçerli bir kapasite girin.';
-    setErrors(e);
+    if (!DATE_REGEX.test(form.date)) e.date = 'Tarih formatı: YYYY-AA-GG';
+    if (!TIME_REGEX.test(form.startTime)) e.startTime = 'Saat formatı: SS:DD';
+    if (!TIME_REGEX.test(form.endTime)) e.endTime = 'Saat formatı: SS:DD';
+    if (!form.maxCapacity || isNaN(Number(form.maxCapacity)) || Number(form.maxCapacity) < 1) {
+      e.maxCapacity = 'Geçerli bir kapasite girin (en az 1).';
+    }
+    setFieldErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const handleCreate = async () => {
     if (!validate() || !user || !community) return;
 
-    const newEvent = await createEvent({
-      title: form.title,
-      description: form.description,
-      location: form.location,
-      locationDetail: form.locationDetail,
-      date: form.date,
-      startTime: form.startTime,
-      endTime: form.endTime,
-      maxCapacity: Number(form.maxCapacity),
-      category,
-      communityId: community.id,
-      communityName: community.name,
-      organizerId: user.id,
-      status: 'upcoming',
-      tags: [],
-      isRegistrationOpen: true,
-    });
+    try {
+      const newEvent = await createEvent({
+        title: form.title.trim(),
+        description: form.description.trim(),
+        location: form.location.trim(),
+        locationDetail: form.locationDetail.trim(),
+        date: form.date,
+        startTime: form.startTime,
+        endTime: form.endTime,
+        maxCapacity: Number(form.maxCapacity),
+        category,
+        communityId: community.id,
+        communityName: community.name,
+        organizerId: user.id,
+        status: 'upcoming',
+        tags: [],
+        isRegistrationOpen: true,
+      });
 
-    Alert.alert('Etkinlik Oluşturuldu!', `"${newEvent.title}" başarıyla oluşturuldu.`, [
-      { text: 'Etkinliği Gör', onPress: () => router.replace(`/events/${newEvent.id}`) },
-      { text: 'Ana Sayfa', onPress: () => router.replace('/(tabs)') },
-    ]);
+      Alert.alert('Etkinlik Oluşturuldu!', `"${newEvent.title}" başarıyla oluşturuldu.`, [
+        { text: 'Etkinliği Gör', onPress: () => router.replace(`/events/${newEvent.id}`) },
+        { text: 'Ana Sayfa', onPress: () => router.replace('/(tabs)') },
+      ]);
+    } catch {
+      Alert.alert('Hata', 'Etkinlik oluşturulamadı. Lütfen tekrar deneyin.');
+    }
   };
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View style={styles.topBar}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.closeBtn}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.closeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="İptal et ve geri dön"
+          >
             <Ionicons name="close" size={22} color={theme.text} />
           </TouchableOpacity>
           <Text style={[styles.topTitle, { color: theme.text }]}>Etkinlik Oluştur</Text>
           <View style={{ width: 40 }} />
         </View>
 
-        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={[styles.stepLabel, { color: theme.textMuted }]}>TEMEL BİLGİLER</Text>
 
-          <Input label="Etkinlik Başlığı" value={form.title} onChangeText={set('title')} leftIcon="text-outline" placeholder="Örn: Python ile Veri Analizi" error={errors.title} />
-          <Input label="Açıklama" value={form.description} onChangeText={set('description')} leftIcon="document-text-outline" placeholder="Etkinliği detaylı açıklayın..." multiline numberOfLines={4} error={errors.description} style={{ height: 100, textAlignVertical: 'top' }} />
-          <Input label="Konum" value={form.location} onChangeText={set('location')} leftIcon="location-outline" placeholder="Örn: Taşkışla A-101" error={errors.location} />
-          <Input label="Konum Detayı (opsiyonel)" value={form.locationDetail} onChangeText={set('locationDetail')} leftIcon="map-outline" placeholder="Ek konum bilgisi" />
+          <Input
+            label="Etkinlik Başlığı"
+            value={form.title}
+            onChangeText={setField('title')}
+            leftIcon="text-outline"
+            placeholder="Örn: Python ile Veri Analizi"
+            error={fieldErrors.title}
+          />
+          <Input
+            label="Açıklama"
+            value={form.description}
+            onChangeText={setField('description')}
+            leftIcon="document-text-outline"
+            placeholder="Etkinliği detaylı açıklayın..."
+            multiline
+            numberOfLines={4}
+            error={fieldErrors.description}
+            style={{ height: 100, textAlignVertical: 'top' }}
+          />
+          <Input
+            label="Konum"
+            value={form.location}
+            onChangeText={setField('location')}
+            leftIcon="location-outline"
+            placeholder="Örn: Taşkışla A-101"
+            error={fieldErrors.location}
+          />
+          <Input
+            label="Konum Detayı (opsiyonel)"
+            value={form.locationDetail}
+            onChangeText={setField('locationDetail')}
+            leftIcon="map-outline"
+            placeholder="Ek konum bilgisi"
+          />
 
           <Text style={[styles.stepLabel, { color: theme.textMuted, marginTop: Spacing.md }]}>TARİH & SAAT</Text>
 
+          <Input
+            label="Tarih"
+            value={form.date}
+            onChangeText={setField('date')}
+            leftIcon="calendar-outline"
+            placeholder="2024-06-15"
+            error={fieldErrors.date}
+          />
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
-              <Input label="Tarih" value={form.date} onChangeText={set('date')} leftIcon="calendar-outline" placeholder="2024-06-15" error={errors.date} />
+              <Input
+                label="Başlangıç"
+                value={form.startTime}
+                onChangeText={setField('startTime')}
+                leftIcon="time-outline"
+                placeholder="14:00"
+                error={fieldErrors.startTime}
+              />
             </View>
-          </View>
-          <View style={styles.row}>
             <View style={{ flex: 1 }}>
-              <Input label="Başlangıç" value={form.startTime} onChangeText={set('startTime')} leftIcon="time-outline" placeholder="14:00" error={errors.startTime} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Input label="Bitiş" value={form.endTime} onChangeText={set('endTime')} leftIcon="time-outline" placeholder="17:00" error={errors.endTime} />
+              <Input
+                label="Bitiş"
+                value={form.endTime}
+                onChangeText={setField('endTime')}
+                leftIcon="time-outline"
+                placeholder="17:00"
+                error={fieldErrors.endTime}
+              />
             </View>
           </View>
 
-          <Input label="Maksimum Kapasite" value={form.maxCapacity} onChangeText={set('maxCapacity')} leftIcon="people-outline" placeholder="50" keyboardType="numeric" error={errors.maxCapacity} />
+          <Input
+            label="Maksimum Kapasite"
+            value={form.maxCapacity}
+            onChangeText={setField('maxCapacity')}
+            leftIcon="people-outline"
+            placeholder="50"
+            keyboardType="numeric"
+            error={fieldErrors.maxCapacity}
+          />
 
           <Text style={[styles.stepLabel, { color: theme.textMuted, marginTop: Spacing.md }]}>KATEGORİ</Text>
 
@@ -154,8 +232,11 @@ export default function CreateEventScreen() {
                       borderWidth: selected ? 1.5 : 1,
                     },
                   ]}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={getEventCategoryLabel(cat)}
                 >
-                  <Ionicons name={categoryIcons[cat]} size={18} color={selected ? color : theme.textSecondary} />
+                  <Ionicons name={CATEGORY_ICONS[cat]} size={18} color={selected ? color : theme.textSecondary} />
                   <Text style={[styles.categoryLabel, { color: selected ? color : theme.textSecondary }]}>
                     {getEventCategoryLabel(cat)}
                   </Text>

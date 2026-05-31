@@ -1,13 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  FlatList,
   useColorScheme,
-  TouchableOpacity,
-  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -15,7 +12,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useEventsStore } from '../../src/store/eventsStore';
 import { useAuthStore } from '../../src/store/authStore';
 import { Avatar } from '../../src/components/ui/Avatar';
-import { Card } from '../../src/components/ui/Card';
 import { ProgressBar } from '../../src/components/ui/ProgressBar';
 import { Colors } from '../../src/theme/colors';
 import { FontSize, FontWeight } from '../../src/theme/typography';
@@ -23,7 +19,21 @@ import { BorderRadius, Spacing } from '../../src/theme/spacing';
 import { MOCK_ATTENDEES, MOCK_USERS } from '../../src/utils/mockData';
 import { getAttendanceRate, formatShortDate } from '../../src/utils/helpers';
 
-const { width } = Dimensions.get('window');
+const MONTHLY_DATA = [
+  { month: 'Oca', events: 3, attendees: 145 },
+  { month: 'Şub', events: 4, attendees: 210 },
+  { month: 'Mar', events: 5, attendees: 287 },
+  { month: 'Nis', events: 6, attendees: 342 },
+  { month: 'May', events: 4, attendees: 198 },
+  { month: 'Haz', events: 7, attendees: 421 },
+] as const;
+
+type SummaryItem = {
+  label: string;
+  value: number | string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+};
 
 export default function MembersScreen() {
   const scheme = useColorScheme();
@@ -33,28 +43,33 @@ export default function MembersScreen() {
   const { events, fetchEvents } = useEventsStore();
   const { community } = useAuthStore();
 
-  useEffect(() => { fetchEvents(); }, []);
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
 
-  const completedEvents = events.filter((e) => e.status === 'completed');
-  const totalAttendees = completedEvents.reduce((s, e) => s + e.checkedInCount, 0);
-  const totalRegistered = completedEvents.reduce((s, e) => s + e.registeredCount, 0);
-  const avgRate = getAttendanceRate(totalAttendees, totalRegistered);
+  const { completedEvents, avgRate } = useMemo(() => {
+    const completed = events.filter((e) => e.status === 'completed');
+    const totalAttendees = completed.reduce((s, e) => s + e.checkedInCount, 0);
+    const totalRegistered = completed.reduce((s, e) => s + e.registeredCount, 0);
+    return { completedEvents: completed, avgRate: getAttendanceRate(totalAttendees, totalRegistered) };
+  }, [events]);
 
-  const monthlyData = [
-    { month: 'Oca', events: 3, attendees: 145 },
-    { month: 'Şub', events: 4, attendees: 210 },
-    { month: 'Mar', events: 5, attendees: 287 },
-    { month: 'Nis', events: 6, attendees: 342 },
-    { month: 'May', events: 4, attendees: 198 },
-    { month: 'Haz', events: 7, attendees: 421 },
+  const topMembers = useMemo(
+    () =>
+      MOCK_USERS.map((u) => ({
+        ...u,
+        attended: MOCK_ATTENDEES.filter((a) => a.userId === u.id && a.checkedIn).length,
+      })).sort((a, b) => b.attended - a.attended),
+    []
+  );
+
+  const maxAttendees = Math.max(...MONTHLY_DATA.map((d) => d.attendees));
+
+  const summaryItems: SummaryItem[] = [
+    { label: 'Toplam Üye', value: community?.memberCount ?? 0, icon: 'people', color: Colors.primary },
+    { label: 'Etkinlik', value: events.length, icon: 'calendar', color: Colors.secondary },
+    { label: 'Katılım %', value: `${avgRate}%`, icon: 'trending-up', color: Colors.success },
   ];
-
-  const maxAttendees = Math.max(...monthlyData.map((d) => d.attendees));
-
-  const topMembers = MOCK_USERS.map((u) => ({
-    ...u,
-    attended: MOCK_ATTENDEES.filter((a) => a.userId === u.id && a.checkedIn).length,
-  })).sort((a, b) => b.attended - a.attended);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
@@ -66,14 +81,14 @@ export default function MembersScreen() {
 
         {/* Summary Cards */}
         <View style={styles.summaryRow}>
-          {[
-            { label: 'Toplam Üye', value: community?.memberCount ?? 0, icon: 'people', color: Colors.primary },
-            { label: 'Etkinlik', value: events.length, icon: 'calendar', color: Colors.secondary },
-            { label: 'Katılım %', value: `${avgRate}%`, icon: 'trending-up', color: Colors.success },
-          ].map((item) => (
-            <View key={item.label} style={[styles.summaryCard, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}>
+          {summaryItems.map((item) => (
+            <View
+              key={item.label}
+              style={[styles.summaryCard, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}
+              accessibilityLabel={`${item.label}: ${item.value}`}
+            >
               <View style={[styles.summaryIcon, { backgroundColor: `${item.color}22` }]}>
-                <Ionicons name={item.icon as never} size={20} color={item.color} />
+                <Ionicons name={item.icon} size={20} color={item.color} />
               </View>
               <Text style={[styles.summaryValue, { color: theme.text }]}>{item.value}</Text>
               <Text style={[styles.summaryLabel, { color: theme.textSecondary }]}>{item.label}</Text>
@@ -92,10 +107,14 @@ export default function MembersScreen() {
           </View>
 
           <View style={styles.chart}>
-            {monthlyData.map((d, i) => {
+            {MONTHLY_DATA.map((d) => {
               const height = Math.max((d.attendees / maxAttendees) * 120, 6);
               return (
-                <View key={i} style={styles.chartBar}>
+                <View
+                  key={d.month}
+                  style={styles.chartBar}
+                  accessibilityLabel={`${d.month}: ${d.attendees} katılımcı`}
+                >
                   <Text style={[styles.chartValue, { color: theme.textMuted }]}>{d.attendees}</Text>
                   <LinearGradient
                     colors={[Colors.primary, Colors.secondary]}
@@ -116,7 +135,10 @@ export default function MembersScreen() {
               const rate = getAttendanceRate(event.checkedInCount, event.registeredCount);
               const color = rate >= 80 ? Colors.success : rate >= 60 ? Colors.warning : Colors.error;
               return (
-                <View key={event.id} style={[styles.breakdownItem, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}>
+                <View
+                  key={event.id}
+                  style={[styles.breakdownItem, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}
+                >
                   <View style={styles.breakdownHeader}>
                     <Text style={[styles.breakdownTitle, { color: theme.text }]} numberOfLines={1}>
                       {event.title}
@@ -147,7 +169,11 @@ export default function MembersScreen() {
           <Text style={[styles.sectionTitle, { color: theme.text }]}>En Aktif Üyeler</Text>
           <View style={styles.memberList}>
             {topMembers.map((member, index) => (
-              <View key={member.id} style={[styles.memberItem, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}>
+              <View
+                key={member.id}
+                style={[styles.memberItem, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}
+                accessibilityLabel={`${index + 1}. ${member.name}, ${member.attended} etkinliğe katıldı`}
+              >
                 <Text style={[styles.rank, { color: index < 3 ? Colors.warning : theme.textMuted }]}>
                   #{index + 1}
                 </Text>

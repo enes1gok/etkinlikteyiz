@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -41,7 +41,7 @@ const statusVariants: Record<string, 'primary' | 'success' | 'warning' | 'error'
   cancelled: 'error',
 };
 
-export function EventCard({ event, onPress, compact = false }: EventCardProps) {
+export const EventCard = memo(function EventCard({ event, onPress, compact = false }: EventCardProps) {
   const { isDark, theme } = useColorScheme();
   const categoryColor = Colors.eventCategoryColors[event.category] ?? Colors.primary;
   const capacityRate = getCapacityRate(event.registeredCount, event.maxCapacity);
@@ -51,7 +51,13 @@ export function EventCard({ event, onPress, compact = false }: EventCardProps) {
 
   if (compact) {
     return (
-      <TouchableOpacity onPress={onPress} activeOpacity={0.8} style={[styles.compactCard, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }, Shadow.sm]}>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.8}
+        style={[styles.compactCard, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }, Shadow.sm]}
+        accessibilityRole="button"
+        accessibilityLabel={`${event.title}, ${formatShortDate(event.date)}, ${event.startTime}`}
+      >
         <View style={[styles.compactAccent, { backgroundColor: categoryColor }]} />
         <View style={[styles.compactIconBox, { backgroundColor: `${categoryColor}22` }]}>
           <Ionicons name={icon} size={16} color={categoryColor} />
@@ -73,7 +79,13 @@ export function EventCard({ event, onPress, compact = false }: EventCardProps) {
   }
 
   return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={[styles.card, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }, Shadow.card]}>
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.85}
+      style={[styles.card, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }, Shadow.card]}
+      accessibilityRole="button"
+      accessibilityLabel={`${event.title}. ${getEventStatusLabel(event.status)}. ${formatShortDate(event.date)}, ${event.startTime}. ${event.location}`}
+    >
       <LinearGradient
         colors={[`${categoryColor}33`, `${categoryColor}08`]}
         style={styles.cardHeader}
@@ -147,7 +159,7 @@ export function EventCard({ event, onPress, compact = false }: EventCardProps) {
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {
