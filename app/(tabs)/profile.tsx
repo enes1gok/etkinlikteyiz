@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -16,10 +16,12 @@ import { useAuthStore } from '../../src/store/authStore';
 import { useEventsStore } from '../../src/store/eventsStore';
 import { Avatar } from '../../src/components/ui/Avatar';
 import { Badge } from '../../src/components/ui/Badge';
+import { AchievementBadges } from '../../src/components/profile/AchievementBadges';
 import { Colors } from '../../src/theme/colors';
 import { FontSize, FontWeight } from '../../src/theme/typography';
 import { BorderRadius, Spacing } from '../../src/theme/spacing';
 import { formatDate } from '../../src/utils/helpers';
+import { Achievement } from '../../src/types';
 
 type MenuItem = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -56,6 +58,73 @@ function MenuRow({ icon, label, value, onPress, color, chevron = true }: MenuIte
   );
 }
 
+function buildAchievements(eventsAttended: number, eventsRegistered: number): Achievement[] {
+  return [
+    {
+      id: 'first_event',
+      title: 'İlk Adım',
+      description: 'İlk etkinliğine katıldın',
+      icon: 'footsteps-outline',
+      color: Colors.success,
+      unlocked: eventsAttended >= 1,
+      unlockedAt: eventsAttended >= 1 ? '2023-10-01' : undefined,
+      progress: Math.min(1, eventsAttended),
+      maxProgress: 1,
+    },
+    {
+      id: 'active_member',
+      title: 'Aktif Üye',
+      description: '5 etkinliğe katıl',
+      icon: 'flame-outline',
+      color: Colors.warning,
+      unlocked: eventsAttended >= 5,
+      unlockedAt: eventsAttended >= 5 ? '2023-11-15' : undefined,
+      progress: Math.min(5, eventsAttended),
+      maxProgress: 5,
+    },
+    {
+      id: 'hero',
+      title: 'Kahraman',
+      description: '10 etkinliğe katıl',
+      icon: 'trophy-outline',
+      color: Colors.primary,
+      unlocked: eventsAttended >= 10,
+      progress: Math.min(10, eventsAttended),
+      maxProgress: 10,
+    },
+    {
+      id: 'legend',
+      title: 'Efsane',
+      description: '20 etkinliğe katıl',
+      icon: 'diamond-outline',
+      color: Colors.secondary,
+      unlocked: eventsAttended >= 20,
+      progress: Math.min(20, eventsAttended),
+      maxProgress: 20,
+    },
+    {
+      id: 'registered_5',
+      title: 'Meraklı',
+      description: '5 etkinliğe kayıt ol',
+      icon: 'bookmark-outline',
+      color: Colors.accent,
+      unlocked: eventsRegistered >= 5,
+      progress: Math.min(5, eventsRegistered),
+      maxProgress: 5,
+    },
+    {
+      id: 'networker',
+      title: 'Networker',
+      description: 'Kariyer etkinliğine katıl',
+      icon: 'people-circle-outline',
+      color: '#F59E0B',
+      unlocked: eventsAttended >= 3,
+      progress: Math.min(3, eventsAttended),
+      maxProgress: 3,
+    },
+  ];
+}
+
 export default function ProfileScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
@@ -70,6 +139,11 @@ export default function ProfileScreen() {
   const roleVariant: 'primary' | 'warning' | 'success' =
     user?.role === 'admin' ? 'warning' : user?.role === 'organizer' ? 'primary' : 'success';
 
+  const achievements = useMemo(
+    () => buildAchievements(user?.eventsAttended ?? 0, userEvents.length),
+    [user?.eventsAttended, userEvents.length]
+  );
+
   const handleLogout = useCallback(() => {
     Alert.alert('Çıkış Yap', 'Hesabından çıkmak istediğinden emin misin?', [
       { text: 'İptal', style: 'cancel' },
@@ -83,6 +157,8 @@ export default function ProfileScreen() {
       },
     ]);
   }, [logout]);
+
+  const unlockedCount = achievements.filter((a) => a.unlocked).length;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: isDark ? Colors.dark.bg : Colors.light.bg }]}>
@@ -108,6 +184,15 @@ export default function ProfileScreen() {
               </View>
             </View>
           </View>
+
+          {unlockedCount > 0 && (
+            <View style={styles.achievementSummary}>
+              <Ionicons name="trophy" size={14} color="rgba(255,255,255,0.9)" />
+              <Text style={styles.achievementSummaryText}>
+                {unlockedCount} başarı kazanıldı
+              </Text>
+            </View>
+          )}
         </LinearGradient>
 
         {/* Community Info */}
@@ -143,6 +228,9 @@ export default function ProfileScreen() {
             </View>
           ))}
         </View>
+
+        {/* Achievements */}
+        <AchievementBadges achievements={achievements} />
 
         {/* Menu Sections */}
         <View style={[styles.menuSection, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: theme.border }]}>
@@ -184,7 +272,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { gap: Spacing.md, paddingBottom: Spacing['3xl'] },
-  heroGradient: { padding: Spacing.xl, paddingTop: Spacing['2xl'] },
+  heroGradient: { padding: Spacing.xl, paddingTop: Spacing['2xl'], gap: Spacing.md },
   profileHeader: { flexDirection: 'row', gap: Spacing.base, alignItems: 'center' },
   profileInfo: { flex: 1, gap: Spacing.xs },
   userName: { fontSize: FontSize.xl, fontWeight: FontWeight.bold, color: '#fff' },
@@ -192,6 +280,8 @@ const styles = StyleSheet.create({
   profileBadges: { flexDirection: 'row', gap: Spacing.xs, flexWrap: 'wrap', marginTop: Spacing.xs / 2 },
   studentIdChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: BorderRadius.full },
   studentIdText: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.8)', fontWeight: FontWeight.medium },
+  achievementSummary: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, backgroundColor: 'rgba(255,255,255,0.12)', alignSelf: 'flex-start', paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: BorderRadius.full },
+  achievementSummaryText: { fontSize: FontSize.xs, color: 'rgba(255,255,255,0.9)', fontWeight: FontWeight.semibold },
   card: { marginHorizontal: Spacing.base, borderRadius: BorderRadius.xl, borderWidth: 1, padding: Spacing.base },
   communityRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
   communityIcon: { width: 44, height: 44, borderRadius: BorderRadius.md, alignItems: 'center', justifyContent: 'center' },

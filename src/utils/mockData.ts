@@ -1,4 +1,4 @@
-import { Community, Event, User, Attendee, Notification } from '../types';
+import { Community, Event, User, Attendee, Notification, EventRating, WaitlistEntry } from '../types';
 
 export const MOCK_COMMUNITIES: Community[] = [
   {
@@ -82,13 +82,22 @@ export const MOCK_EVENTS: Event[] = [
     location: 'Taşkışla Binası A-101',
     locationDetail: 'İTÜ Taşkışla Kampüsü, Zemin Kat',
     maxCapacity: 50,
-    registeredCount: 43,
+    registeredCount: 50,
     checkedInCount: 0,
     status: 'upcoming',
     tags: ['blockchain', 'web3', 'solidity', 'ethereum'],
     isRegistrationOpen: true,
     qrCodeData: 'EVENT:e1:IEEE:Web3Blockchain2024',
     createdAt: subtractDays(7),
+    interestedCount: 67,
+    waitlistCount: 12,
+    agenda: [
+      { id: 'a1', time: '14:00', title: 'Açılış & Tanışma', duration: 15 },
+      { id: 'a2', time: '14:15', title: 'Blockchain Temelleri', speaker: 'Ahmet Yılmaz', duration: 45 },
+      { id: 'a3', time: '15:00', title: 'Solidity ile Akıllı Sözleşme', speaker: 'Dr. Kemal Çelik', duration: 60 },
+      { id: 'a4', time: '16:00', title: 'Pratik: Deploy Atölyesi', duration: 45 },
+      { id: 'a5', time: '16:45', title: 'Soru & Cevap', duration: 15 },
+    ],
   },
   {
     id: 'e2',
@@ -111,6 +120,7 @@ export const MOCK_EVENTS: Event[] = [
     isRegistrationOpen: true,
     qrCodeData: 'EVENT:e2:MUZIK:BaharKonseri2024',
     createdAt: subtractDays(14),
+    interestedCount: 312,
   },
   {
     id: 'e3',
@@ -133,10 +143,20 @@ export const MOCK_EVENTS: Event[] = [
     isRegistrationOpen: true,
     qrCodeData: 'EVENT:e3:GIRISIM:Hackathon2024',
     createdAt: subtractDays(10),
+    interestedCount: 142,
+    agenda: [
+      { id: 'b1', time: '09:00', title: 'Açılış Töreni & Kurallar', duration: 30 },
+      { id: 'b2', time: '09:30', title: 'Takım Oluşturma', duration: 30 },
+      { id: 'b3', time: '10:00', title: 'Geliştirme Maratonu Başlıyor', duration: 480 },
+      { id: 'b4', time: '18:00', title: '1. Gün Check-in & Mentörlük', duration: 60 },
+      { id: 'b5', time: '09:00', title: '2. Gün: Son Sprint', speaker: '2. Gün', duration: 360 },
+      { id: 'b6', time: '15:00', title: 'Sunum & Demo Day', duration: 120 },
+      { id: 'b7', time: '17:00', title: 'Ödül Töreni', duration: 60 },
+    ],
   },
   {
     id: 'e4',
-    title: 'Python ile Yapay Zeka Semineري',
+    title: 'Python ile Yapay Zeka Semineri',
     description: 'Makine öğrenmesi ve derin öğrenme algoritmalarını Python ile uygulamalı olarak öğrenin. TensorFlow ve PyTorch frameworkleri üzerinde çalışarak gerçek veri setleriyle modeller eğiteceksiniz.',
     communityId: 'c1',
     communityName: 'IEEE Öğrenci Topluluğu',
@@ -154,6 +174,9 @@ export const MOCK_EVENTS: Event[] = [
     isRegistrationOpen: false,
     qrCodeData: 'EVENT:e4:IEEE:PythonAI2024',
     createdAt: subtractDays(17),
+    interestedCount: 89,
+    averageRating: 4.6,
+    ratingCount: 41,
   },
   {
     id: 'e5',
@@ -175,6 +198,9 @@ export const MOCK_EVENTS: Event[] = [
     isRegistrationOpen: false,
     qrCodeData: 'EVENT:e5:IEEE:KariyerGunleri2024',
     createdAt: subtractDays(30),
+    interestedCount: 501,
+    averageRating: 4.8,
+    ratingCount: 203,
   },
   {
     id: 'e6',
@@ -196,6 +222,7 @@ export const MOCK_EVENTS: Event[] = [
     isRegistrationOpen: false,
     qrCodeData: 'EVENT:e6:MUZIK:DogaYuruyusu2024',
     createdAt: subtractDays(5),
+    interestedCount: 55,
   },
 ];
 
@@ -208,6 +235,17 @@ export const MOCK_ATTENDEES: Attendee[] = [
   { id: 'a6', userId: 'u4', eventId: 'e4', name: 'Ayşe Çelik', studentId: '150210095', registeredAt: subtractDays(15), checkedIn: true, checkedInAt: subtractDays(3) + 'T15:12:00Z' },
   { id: 'a7', userId: 'u5', eventId: 'e4', name: 'Mustafa Şahin', studentId: '150180023', registeredAt: subtractDays(14), checkedIn: true, checkedInAt: subtractDays(3) + 'T15:08:00Z' },
   { id: 'a8', userId: 'u1', eventId: 'e4', name: 'Ahmet Yılmaz', studentId: '150180001', registeredAt: subtractDays(16), checkedIn: true, checkedInAt: subtractDays(3) + 'T15:05:00Z' },
+];
+
+export const MOCK_WAITLIST: WaitlistEntry[] = [
+  { id: 'w1', eventId: 'e1', userId: 'u10', name: 'Berk Arslan', studentId: '150220011', joinedAt: subtractDays(1) },
+  { id: 'w2', eventId: 'e1', userId: 'u11', name: 'Elif Yıldız', studentId: '150220034', joinedAt: subtractDays(1) },
+];
+
+export const MOCK_RATINGS: EventRating[] = [
+  { id: 'r1', eventId: 'e4', userId: 'u3', rating: 5, comment: 'Harika bir etkinlikti! Çok şey öğrendim.', createdAt: subtractDays(2) },
+  { id: 'r2', eventId: 'e4', userId: 'u4', rating: 4, comment: 'Güzel organizasyon, içerik çok iyiydi.', createdAt: subtractDays(2) },
+  { id: 'r3', eventId: 'e5', userId: 'u1', rating: 5, comment: 'Kariyer fırsatları açısından çok verimli geçti.', createdAt: subtractDays(9) },
 ];
 
 export const MOCK_NOTIFICATIONS: Notification[] = [

@@ -34,6 +34,14 @@ export type CommunityCategory =
   | 'gaming'
   | 'other';
 
+export interface AgendaItem {
+  id: string;
+  time: string;
+  title: string;
+  speaker?: string;
+  duration: number;
+}
+
 export interface Event {
   id: string;
   title: string;
@@ -56,6 +64,11 @@ export interface Event {
   isRegistrationOpen: boolean;
   qrCodeData: string;
   createdAt: string;
+  agenda?: AgendaItem[];
+  interestedCount?: number;
+  waitlistCount?: number;
+  averageRating?: number;
+  ratingCount?: number;
 }
 
 export type EventCategory =
@@ -80,6 +93,24 @@ export interface Attendee {
   registeredAt: string;
   checkedIn: boolean;
   checkedInAt?: string;
+}
+
+export interface WaitlistEntry {
+  id: string;
+  eventId: string;
+  userId: string;
+  name: string;
+  studentId: string;
+  joinedAt: string;
+}
+
+export interface EventRating {
+  id: string;
+  eventId: string;
+  userId: string;
+  rating: number;
+  comment?: string;
+  createdAt: string;
 }
 
 export interface Notification {
@@ -121,4 +152,16 @@ export interface CheckInResult {
   success: boolean;
   message: string;
   attendee?: Attendee;
+}
+
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  color: string;
+  unlocked: boolean;
+  unlockedAt?: string;
+  progress: number;
+  maxProgress: number;
 }
