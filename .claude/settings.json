@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run lint)",
+      "Bash(npm run type-check)",
+      "Bash(npm start)",
+      "Bash(npm install *)",
+      "Bash(npx expo *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(find . -type f *)",
+      "Bash(ls *)",
+      "Bash(cat *)"
+    ],
+    "deny": []
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Claude] Dosya değiştiriliyor: $CLAUDE_TOOL_INPUT_FILE_PATH'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /home/user/event_organizer && npm run type-check 2>&1 | tail -5 || true"
+          }
+        ]
+      }
+    ]
+  }
+}

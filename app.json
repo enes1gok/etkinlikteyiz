@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "UniComm",
+    "slug": "unicomm",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F0F14"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.unicomm.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Etkinlik girişlerinde QR kod okumak için kameraya ihtiyaç duyuyoruz.",
+        "NSMicrophoneUsageDescription": "Uygulama mikrofona ihtiyaç duymamaktadır."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0F0F14"
+      },
+      "package": "com.unicomm.app",
+      "permissions": ["android.permission.CAMERA", "android.permission.VIBRATE"]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-camera",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#6366F1"
+        }
+      ]
+    ],
+    "scheme": "unicomm",
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
